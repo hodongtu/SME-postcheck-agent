@@ -1,0 +1,15 @@
+.env
+.ocr_cache/
+logs/
+docs/
+# Real dossiers never enter the repository. The three synthetic cases below do,
+# because testing/checks reads them and a fresh clone must be able to run the
+# suite. Regenerate them with: python3 samples/make_samples.py
+samples/*
+!samples/make_samples.py
+!samples/case_demo/
+!samples/case_nhieu_ky_bctc/
+!samples/case_thieu_ho_so/
+__pycache__/
+*.pyc
+.DS_Store

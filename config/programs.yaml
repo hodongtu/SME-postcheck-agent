@@ -1,0 +1,115 @@
+# =============================================================================
+# POST-CHECK RULE SETTINGS
+# =============================================================================
+#
+# THIS IS THE SOURCE OF TRUTH for every threshold and checklist the rules use.
+# Editing this file changes what "Đạt" means - no Python change required.
+#
+# `type_id` must exist in src/agents/documents/document_matrix.yaml; the loader
+# checks that on load and names the offending id. Those ids keep their original
+# spelling because that file is copied verbatim from SME_creditmemo.
+#
+# Places the business must still fill in are marked TODO.
+
+version: 1
+
+defaults:
+  # BRD 2.4: "chênh lệch quá 40%"
+  variance_threshold_pct: 40
+
+  # BRD 2.3.a: booked before 30 April -> use year N-2 statements, else N-1
+  financials_cutoff_mmdd: "04-30"
+
+  # BRD 2.3.b / 2.3.c: 100% is the CCR of a facility with no unsecured benefit
+  unsecured_ccr_pct: 100
+
+  # BRD 2.3.c: below 100% CCR the collateral must be a vehicle or real estate
+  secured_collateral_types: ["PTVT", "BDS"]
+
+  # BRD 2.3.a: "Word/excel/pdf/xml"
+  allowed_extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".xml"]
+
+  # BRD 2.3.a: total assets must equal total capital. Zero tolerance - a
+  # balance sheet out by one dong is a balance sheet that does not balance.
+  balance_tolerance_vnd: 0
+
+  # BRD 2.4: from this group upwards counts as "nợ cần chú ý, nợ có vấn đề"
+  debt_group_warning_threshold: 2
+
+  # BRD 2.4: "Số lần phát sinh PDLD". TODO - business to confirm the minimum.
+  min_pdld_count: 3
+
+  # Expanded before addresses are compared (V03, F01)
+  address_abbreviations:
+    tp: "thanh pho"
+    tt: "thi tran"
+    tx: "thi xa"
+    q: "quan"
+    h: "huyen"
+    p: "phuong"
+    x: "xa"
+    kp: "khu pho"
+    d: "duong"
+
+# CIC prints the debt group as free text. Matched after normalize_text, so no
+# diacritics here. A label absent from this table leaves the fact missing with
+# the string it read - it is never guessed as group 1.
+debt_group_by_label:
+  "no du tieu chuan": 1
+  "no can chu y": 2
+  "no duoi tieu chuan": 3
+  "no nghi ngo": 4
+  "no co kha nang mat von": 5
+
+# BRD 2.3.b: a non-core industry forces CCR to 100%.
+# TODO - business to supply the full list of GSO codes.
+non_core_industries:
+  - "4711"
+  - "6810"
+
+programs:
+
+  - id: B1CP
+    label: "B1CP"
+    checklist:
+      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory,   requires_signature: true}
+      - {type_id: bang_can_doi_ke_toan,           requirement: mandatory,   requires_signature: true}
+      - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory,   requires_signature: true}
+      - {type_id: to_khai_thue_gtgt,              requirement: mandatory,   requires_signature: false}
+      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory,   requires_signature: true}
+      - {type_id: cic_khach_hang_vay,             requirement: mandatory,   requires_signature: false}
+      - {type_id: cic_dai_dien_phap_luat_co_dong, requirement: mandatory,   requires_signature: false}
+      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory,   requires_signature: true}
+      - {type_id: ho_so_tsbd,                     requirement: recommended, requires_signature: false}
+    criteria:
+      max_cic_group_unsecured: 1
+      blwl_blocks_unsecured: true
+
+  - id: MISA
+    label: "MISA"
+    checklist:
+      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory, requires_signature: true}
+      - {type_id: bang_can_doi_ke_toan,           requirement: mandatory, requires_signature: true}
+      - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory, requires_signature: true}
+      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory, requires_signature: true}
+      - {type_id: cic_khach_hang_vay,             requirement: mandatory, requires_signature: false}
+      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory, requires_signature: true}
+    criteria:
+      max_cic_group_unsecured: 1
+      blwl_blocks_unsecured: true
+
+  - id: PLPP
+    label: "PL++"
+    checklist:
+      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory, requires_signature: true}
+      - {type_id: bang_can_doi_ke_toan,           requirement: mandatory, requires_signature: true}
+      - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory, requires_signature: true}
+      - {type_id: to_khai_thue_gtgt,              requirement: mandatory, requires_signature: false}
+      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory, requires_signature: true}
+      - {type_id: hop_dong_dau_ra_dau_vao,        requirement: mandatory, requires_signature: true}
+      - {type_id: cic_khach_hang_vay,             requirement: mandatory, requires_signature: false}
+      - {type_id: cic_dai_dien_phap_luat_co_dong, requirement: mandatory, requires_signature: false}
+      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory, requires_signature: true}
+    criteria:
+      max_cic_group_unsecured: 0
+      blwl_blocks_unsecured: true

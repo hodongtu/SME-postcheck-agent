@@ -1,0 +1,212 @@
+{
+  "values": {
+    "bep.customer_name": "CÔNG TY TNHH THƯƠNG MẠI ABC",
+    "bep.tax_code": "0101234567",
+    "bep.address": "Số 10, P. Láng Hạ, Q. Đống Đa, TP. Hà Nội",
+    "bep.owner_name": "Nguyễn Văn A",
+    "bep.owner_id_number": "001080001234",
+    "bep.owner_birth_year": 1980,
+    "bep.gso_code": "4711",
+    "bep.industry": "Bán buôn tổng hợp",
+    "bep.program": "B1CP",
+    "bep.approved_limit": 5000000000,
+    "bep.approved_limit_by_product": {
+      "Vay ngắn hạn": 3000000000,
+      "Thấu chi": 2000000000
+    },
+    "bep.batch_valid_from": "2025-01-02",
+    "bep.batch_valid_to": "2025-06-30",
+    "bep.sto_revenue": 20000000000,
+    "t24.booking_date": "2025-08-15",
+    "t24.active_limit": 8000000000,
+    "t24.active_limit_by_product": {
+      "Vay ngắn hạn": 6000000000,
+      "Thấu chi": 2000000000
+    },
+    "t24.ccr": 50,
+    "collateral.items": [
+      {
+        "kind": "HANG TON KHO",
+        "value": 4000000000
+      }
+    ],
+    "cic.customer_debt_group_at_approval": 3,
+    "cic.owner_debt_group_at_approval": 2,
+    "blwl.customer_at_approval": true,
+    "blwl.owner_at_approval": false,
+    "cic.customer_debt_group_at_postcheck": 3,
+    "cic.owner_debt_group_at_postcheck": 2,
+    "blwl.customer_at_postcheck": true,
+    "blwl.owner_at_postcheck": true,
+    "virac.revenue_by_year": {
+      "2022": 50000000000
+    },
+    "virac.net_profit_by_year": {
+      "2022": 9000000000
+    },
+    "cashflow.pdld_count": 0,
+    "doc.customer_name_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "Công ty TNHH Thương mại ABD"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "Công ty CP Thương mại ABC"
+      }
+    ],
+    "doc.tax_code_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "0101234567"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "0109999999"
+      }
+    ],
+    "doc.address_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "Số 10, P. Láng Hạ, Q. Đống Đa, TP. Hà Nội"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "Số 99, P. Trung Hoà, Q. Cầu Giấy, TP. Hà Nội"
+      }
+    ],
+    "doc.owner_name_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "Nguyễn Văn A"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "Trần Thị B"
+      }
+    ],
+    "doc.owner_id_number_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "001080009999"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "001080009999"
+      },
+      {
+        "filename": "anh_kho.jpg",
+        "value": "001080009999"
+      }
+    ],
+    "doc.owner_birth_year_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "1975"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "1975"
+      },
+      {
+        "filename": "anh_kho.jpg",
+        "value": "1975"
+      }
+    ],
+    "doc.document_date_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "2025-05-10"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "2024-03-30"
+      }
+    ],
+    "doc.document_number_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "SH-001/2024"
+      },
+      {
+        "filename": "bctc_2022.pdf",
+        "value": "SH-001/2024"
+      }
+    ],
+    "doc.signature_and_seal": [
+      {
+        "filename": "giay_dang_ky_kinh_doanh.pdf",
+        "type_id": "giay_dang_ky_kinh_doanh",
+        "has_signature": true,
+        "has_seal": false
+      },
+      {
+        "filename": "bang_can_doi_ke_toan.pdf",
+        "type_id": "bang_can_doi_ke_toan",
+        "has_signature": true,
+        "has_seal": false
+      },
+      {
+        "filename": "bao_cao_ket_qua_kinh_doanh.pdf",
+        "type_id": "bao_cao_ket_qua_kinh_doanh",
+        "has_signature": true,
+        "has_seal": false
+      },
+      {
+        "filename": "de_nghi_cap_tin_dung.pdf",
+        "type_id": "de_nghi_cap_tin_dung",
+        "has_signature": true,
+        "has_seal": false
+      },
+      {
+        "filename": "bao_cao_khao_sat_thuc_dia.pdf",
+        "type_id": "bao_cao_khao_sat_thuc_dia",
+        "has_signature": true,
+        "has_seal": false
+      }
+    ],
+    "doc.types_present": [
+      "giay_dang_ky_kinh_doanh",
+      "bang_can_doi_ke_toan"
+    ],
+    "doc.extensions": [
+      {
+        "filename": "dkkd.pdf",
+        "extension": ".pdf"
+      },
+      {
+        "filename": "anh_kho.jpg",
+        "extension": ".jpg"
+      }
+    ],
+    "doc.industry_on_registration": "Kinh doanh bất động sản",
+    "doc.industry_on_sitevisit": "Cho thuê kho bãi",
+    "doc.financials.report_year": 2022,
+    "doc.financials.total_assets": 12000000000,
+    "doc.financials.total_capital": 11000000000,
+    "doc.financials.revenue_prior_year": 5000000000,
+    "doc.financials.revenue_current_year": 22000000000,
+    "doc.financials.net_profit_current_year": 1400000000,
+    "doc.financials.has_digital_signature": false,
+    "doc.proposal.declared_revenue": 2000000000,
+    "doc.proposal.requested_limit": 2000000000,
+    "doc.proposal.collateral_items": [
+      {
+        "category": "HANG TON KHO",
+        "description": "Kho hàng",
+        "value": 1000000000
+      }
+    ],
+    "cic.collateral_items": [
+      {
+        "lender": "TCB - CN Hà Nội",
+        "kind": "01",
+        "description": "Nhà xưởng Hà Nội",
+        "value": 8000000000,
+        "released_on": "12/03/2025"
+      }
+    ],
+    "case.postcheck_date": "2025-09-14"
+  },
+  "reasons": {}
+}

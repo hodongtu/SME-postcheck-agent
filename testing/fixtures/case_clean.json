@@ -1,0 +1,226 @@
+{
+  "values": {
+    "bep.customer_name": "CÔNG TY TNHH THƯƠNG MẠI ABC",
+    "bep.tax_code": "0101234567",
+    "bep.address": "Số 10, P. Láng Hạ, Q. Đống Đa, TP. Hà Nội",
+    "bep.owner_name": "Nguyễn Văn A",
+    "bep.owner_id_number": "001080001234",
+    "bep.owner_birth_year": 1980,
+    "bep.gso_code": "4610",
+    "bep.industry": "Bán buôn tổng hợp",
+    "bep.program": "B1CP",
+    "bep.approved_limit": 5000000000,
+    "bep.approved_limit_by_product": {
+      "Vay ngắn hạn": 3000000000,
+      "Thấu chi": 2000000000
+    },
+    "bep.batch_valid_from": "2025-01-02",
+    "bep.batch_valid_to": "2025-06-30",
+    "bep.sto_revenue": 20000000000,
+    "t24.booking_date": "2025-03-14",
+    "t24.active_limit": 5000000000,
+    "t24.active_limit_by_product": {
+      "Vay ngắn hạn": 3000000000,
+      "Thấu chi": 2000000000
+    },
+    "t24.ccr": 70,
+    "collateral.items": [
+      {
+        "kind": "BDS",
+        "value": 8000000000
+      }
+    ],
+    "cic.customer_debt_group_at_approval": 1,
+    "cic.owner_debt_group_at_approval": 1,
+    "blwl.customer_at_approval": false,
+    "blwl.owner_at_approval": false,
+    "cic.customer_debt_group_at_postcheck": 1,
+    "cic.owner_debt_group_at_postcheck": 1,
+    "blwl.customer_at_postcheck": false,
+    "blwl.owner_at_postcheck": false,
+    "virac.revenue_by_year": {
+      "2023": 21000000000
+    },
+    "virac.net_profit_by_year": {
+      "2023": 1500000000
+    },
+    "cashflow.pdld_count": 5,
+    "doc.customer_name_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "Công ty TNHH Thương mại ABC"
+      },
+      {
+        "filename": "bctc_2023.pdf",
+        "value": "Công ty TNHH Thương mại ABC"
+      },
+      {
+        "filename": "de_nghi_vay_von.docx",
+        "value": "Công ty TNHH Thương mại ABC"
+      },
+      {
+        "filename": "cic_kh.pdf",
+        "value": "Công ty TNHH Thương mại ABC"
+      }
+    ],
+    "doc.tax_code_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "0101234567"
+      },
+      {
+        "filename": "bctc_2023.pdf",
+        "value": "0101234567"
+      },
+      {
+        "filename": "de_nghi_vay_von.docx",
+        "value": "0101234567"
+      },
+      {
+        "filename": "cic_kh.pdf",
+        "value": "0101234567"
+      }
+    ],
+    "doc.address_values": [
+      {
+        "filename": "cic_kh.pdf",
+        "value": "Số 10, Phường Láng Hạ, Quận Đống Đa, Thành phố Hà Nội"
+      }
+    ],
+    "doc.owner_name_values": [
+      {
+        "filename": "cic_kh.pdf",
+        "value": "NGUYỄN VĂN A"
+      }
+    ],
+    "doc.owner_id_number_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "001 080 001234"
+      }
+    ],
+    "doc.owner_birth_year_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "01/01/1980"
+      }
+    ],
+    "doc.document_date_values": [
+      {
+        "filename": "cic_kh.pdf",
+        "value": "2024-12-20"
+      },
+      {
+        "filename": "khao_sat.pdf",
+        "value": "2024-12-15"
+      }
+    ],
+    "doc.document_number_values": [
+      {
+        "filename": "dkkd.pdf",
+        "value": "SH-001/2024"
+      },
+      {
+        "filename": "bctc_2023.pdf",
+        "value": "SH-002/2024"
+      },
+      {
+        "filename": "de_nghi_vay_von.docx",
+        "value": "SH-003/2024"
+      },
+      {
+        "filename": "cic_kh.pdf",
+        "value": "SH-004/2024"
+      }
+    ],
+    "doc.signature_and_seal": [
+      {
+        "filename": "giay_dang_ky_kinh_doanh.pdf",
+        "type_id": "giay_dang_ky_kinh_doanh",
+        "has_signature": true,
+        "has_seal": true
+      },
+      {
+        "filename": "bang_can_doi_ke_toan.pdf",
+        "type_id": "bang_can_doi_ke_toan",
+        "has_signature": true,
+        "has_seal": true
+      },
+      {
+        "filename": "bao_cao_ket_qua_kinh_doanh.pdf",
+        "type_id": "bao_cao_ket_qua_kinh_doanh",
+        "has_signature": true,
+        "has_seal": true
+      },
+      {
+        "filename": "de_nghi_cap_tin_dung.pdf",
+        "type_id": "de_nghi_cap_tin_dung",
+        "has_signature": true,
+        "has_seal": true
+      },
+      {
+        "filename": "bao_cao_khao_sat_thuc_dia.pdf",
+        "type_id": "bao_cao_khao_sat_thuc_dia",
+        "has_signature": true,
+        "has_seal": true
+      }
+    ],
+    "doc.types_present": [
+      "giay_dang_ky_kinh_doanh",
+      "bang_can_doi_ke_toan",
+      "bao_cao_ket_qua_kinh_doanh",
+      "de_nghi_cap_tin_dung",
+      "bao_cao_khao_sat_thuc_dia",
+      "to_khai_thue_gtgt",
+      "cic_khach_hang_vay",
+      "cic_dai_dien_phap_luat_co_dong"
+    ],
+    "doc.extensions": [
+      {
+        "filename": "dkkd.pdf",
+        "extension": ".pdf"
+      },
+      {
+        "filename": "bctc_2023.pdf",
+        "extension": ".pdf"
+      },
+      {
+        "filename": "de_nghi_vay_von.docx",
+        "extension": ".docx"
+      },
+      {
+        "filename": "cic_kh.pdf",
+        "extension": ".pdf"
+      }
+    ],
+    "doc.industry_on_registration": "Bán buôn tổng hợp",
+    "doc.industry_on_sitevisit": "Bán buôn tổng hợp, kho hàng tại Hà Nội",
+    "doc.financials.report_year": 2023,
+    "doc.financials.total_assets": 12000000000,
+    "doc.financials.total_capital": 12000000000,
+    "doc.financials.revenue_prior_year": 18000000000,
+    "doc.financials.revenue_current_year": 22000000000,
+    "doc.financials.net_profit_current_year": 1400000000,
+    "doc.financials.has_digital_signature": true,
+    "doc.proposal.declared_revenue": 22000000000,
+    "doc.proposal.requested_limit": 5000000000,
+    "doc.proposal.collateral_items": [
+      {
+        "category": "BDS",
+        "description": "Nhà xưởng Hà Nội",
+        "value": 8000000000
+      }
+    ],
+    "cic.collateral_items": [
+      {
+        "lender": "TCB - CN Hà Nội",
+        "kind": "01",
+        "description": "Nhà xưởng Hà Nội",
+        "value": 8000000000,
+        "released_on": null
+      }
+    ],
+    "case.postcheck_date": "2025-09-14"
+  },
+  "reasons": {}
+}
