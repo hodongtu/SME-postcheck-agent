@@ -236,8 +236,8 @@ def _parse_financial_statement(root: ET.Element, result: TaxXmlResult) -> TaxXml
         # Same block the LLM schema asks for, so both paths offer the identity
         # rules the same field under the same name.
         "customer": {
-            "ten": result.taxpayer_name or "",
-            "ma_so_thue": result.taxpayer_id or "",
+            "name": result.taxpayer_name or "",
+            "tax_code": result.taxpayer_id or "",
         },
         "document_type": result.form_name or "BCTC",
         "reporting_period": {

@@ -27,22 +27,15 @@
 #               document into structured JSON (src/agents/financial_statement_extraction.py).
 #   proposal_extraction : true = extract the credit application, sections B, C
 #               and D (src/agents/proposal_extraction.py).
-#   cic_s10a_extraction : true = extract the CIC credit-relationship report,
-#               form S10A (src/agents/cic_s10a_extraction.py). Named after the
-#               form code because CIC issues several reports whose structures
-#               have nothing in common: S10A is credit relationships, R20 is
-#               loan collateral.
-#   cic_r20_extraction : true = extract the CIC loan-collateral report,
-#               form R20 (src/agents/cic_r20_extraction.py). Named after the
-#               form code, like the S10A pass above.
+#   sitevisit_photo_extraction : true = run the vision pass over the photo
+#               itself (src/agents/extraction/sitevisit_photo_extraction.py).
+#               This one reads the FILE, not text extracted from it.
 #               EACH flag costs one extra LLM call per matching document.
 #
-# CHANGED FROM SME_creditmemo: added the CIC form codes ("cic s10a", "cic r20")
-# as keywords. Post-check routes each CIC report to a different extraction pass
-# and to a different subject, so telling the three apart matters more here than
-# it did there. Without them, a file named CIC_S10A.pdf or CIC_R20.pdf matched
-# only the generic "cic" keyword and every CIC report landed on the same type.
-# Additive; safe to port back.
+# CHANGED FROM SME_creditmemo: the whole "Hồ sơ nội bộ" group - the three CIC
+# reports - is removed. Post-check reads CIC from a system query at both the
+# approval and the review date, so a CIC report in the dossier has no reader.
+# Do NOT port this deletion back: CreditMemo still extracts those reports.
 
 # --- Choosing the primary agent ----------------------------------------------
 # `primary_agent` is declared at group level and applies to every type in the
@@ -494,81 +487,6 @@ groups:
           - "ket qua dinh gia"
 
   # ===========================================================================
-  - id: ho_so_noi_bo
-    label: "Hồ sơ nội bộ"
-    primary_agent: CREDIT_RELATIONSHIP_AGENT
-    types:
-
-      - id: cic_khach_hang_vay
-        short_label: "Thông tin CIC khách hàng vay"
-        label: "Thông tin CIC của khách hàng vay"
-        requirement:
-          cap_moi: "Bắt buộc"
-          tai_cap: "Bắt buộc"
-        cic_s10a_extraction: true
-        agents:
-          FINANCIAL_ANALYSIS_AGENT: R
-          CREDIT_PROPOSAL_AGENT: R
-          CREDIT_RELATIONSHIP_AGENT: R
-        keywords:
-          - "thong tin cic cua khach hang vay"
-          - "cic khach hang vay"
-          - "cic s10a"
-          - "bao cao chi tiet quan he tin dung"
-          - "thong tin cic"
-          - "bao cao cic"
-          - "cic"
-          - "trung tam thong tin tin dung"
-          - "quan he tin dung"
-          - "lich su tin dung"
-          - "nhom no"
-          - "no qua han"
-          - "no xau"
-          - "no can chu y"
-          - "du no vay"
-          - "to chuc tin dung"
-          - "xep hang tin dung"
-          - "credit bureau"
-
-      - id: cic_tai_san_bao_dam
-        short_label: "Thông tin CIC tài sản bảo đảm"
-        label: "Thông tin CIC Tài sản bảo đảm của Khách hàng vay"
-        cic_r20_extraction: true
-        requirement:
-          cap_moi: "Không bắt buộc"
-          tai_cap: "Không bắt buộc"
-        agents:
-          CREDIT_RELATIONSHIP_AGENT: O
-        keywords:
-          - "thong tin cic tai san bao dam"
-          - "cic tai san bao dam"
-          - "cic r20"
-          - "thong tin dam bao tien vay"
-          - "cic tsbd"
-          - "dam bao tien vay cua khach hang"
-          - "danh sach tai san bao dam"
-          - "chi tiet ve bao dam tien vay"
-          - "ma so tai san"
-          - "ngay bao cao tai san gan nhat"
-          - "ngay the chap"
-          - "ngay giai chap"
-
-      - id: cic_dai_dien_phap_luat_co_dong
-        short_label: "Thông tin CIC người đại diện, cổ đông"
-        label: >-
-          Thông tin CIC Đại diện pháp luật, cổ đông/cá nhân góp vốn sở hữu
-          >= 30% vốn cổ phần
-        requirement:
-          cap_moi: "Bắt buộc"
-          tai_cap: "Bắt buộc"
-        agents:
-          CREDIT_RELATIONSHIP_AGENT: R
-        keywords:
-          - "thong tin cic dai dien phap luat"
-          - "cic dai dien phap luat"
-          - "cic co dong"
-
-  # ===========================================================================
   - id: ho_so_soan_thao_noi_bo
     label: "Hồ sơ soạn thảo nội bộ"
     primary_agent: BUSINESS_ACTIVITY_AGENT
@@ -601,6 +519,24 @@ groups:
           - "danh gia rui ro"
           - "sitevisit"
           - "site visit"
+
+      - id: anh_khao_sat_thuc_dia
+        short_label: "Ảnh khảo sát thực địa"
+        label: "Hình ảnh khảo sát thực địa do RM chụp"
+        requirement:
+          cap_moi: "Bắt buộc"
+          tai_cap: "Bắt buộc"
+        sitevisit_photo_extraction: true
+        agents:
+          BUSINESS_ACTIVITY_AGENT: R
+        keywords:
+          - "anh khao sat thuc dia"
+          - "hinh anh khao sat"
+          - "hinh anh thuc dia"
+          - "anh khao sat"
+          - "anh thuc dia"
+          - "anh hien truong"
+          - "hinh thuc dia"
 
       - id: bao_cao_gioi_han_tin_dung_nhom_kh
         short_label: "Báo cáo giới hạn tín dụng nhóm khách hàng"

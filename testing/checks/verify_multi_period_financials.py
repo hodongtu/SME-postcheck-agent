@@ -35,7 +35,7 @@ CURRENT_NET_REVENUE = 62_116_063_780
 def _statement_block(year: int, total_assets: int, net_revenue: int) -> dict:
     label = f"Năm {year}"
     return {
-        "customer": {"ten": "CÔNG TY MẪU", "ma_so_thue": "0201123795"},
+        "customer": {"name": "CÔNG TY MẪU", "tax_code": "0201123795"},
         "document_type": "BCTC",
         "reporting_period": {
             "period_label": label,
@@ -73,6 +73,7 @@ def main() -> int:
         conform_financial_statement,
     )
     from src.facts import Facts
+    from src.settings import get_settings
     from src.pipeline import _assemble_financials
     from src.types import PostcheckDocument
 
@@ -97,7 +98,7 @@ def main() -> int:
     ]
 
     facts = Facts()
-    _assemble_financials(facts, documents)
+    _assemble_financials(facts, documents, get_settings())
     problems: list[str] = []
 
     report_year = facts.get("doc.financials.report_year")
@@ -129,7 +130,7 @@ def main() -> int:
 
     # A dossier with one period only must say so rather than invent a prior year.
     single = Facts()
-    _assemble_financials(single, [documents[2]])
+    _assemble_financials(single, [documents[2]], get_settings())
     if single.has("doc.financials.revenue_prior_year"):
         problems.append(
             "a single-period dossier reported a prior-year revenue it cannot have"

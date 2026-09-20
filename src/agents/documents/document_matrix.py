@@ -45,9 +45,8 @@ class DocumentType:
     requirement: dict[str, str] = field(default_factory=dict)
     financial_statement_extraction: bool = False
     proposal_extraction: bool = False
-    cic_s10a_extraction: bool = False
-    cic_r20_extraction: bool = False
     sitevisit_extraction: bool = False
+    sitevisit_photo_extraction: bool = False
     ledger_extraction: bool = False
 
     @property
@@ -263,14 +262,11 @@ def _load(path: Path) -> DocumentMatrix:
                 proposal_extraction=bool(
                     entry.get("proposal_extraction", False)
                 ),
-                cic_s10a_extraction=bool(
-                    entry.get("cic_s10a_extraction", False)
-                ),
-                cic_r20_extraction=bool(
-                    entry.get("cic_r20_extraction", False)
-                ),
                 sitevisit_extraction=bool(
                     entry.get("sitevisit_extraction", False)
+                ),
+                sitevisit_photo_extraction=bool(
+                    entry.get("sitevisit_photo_extraction", False)
                 ),
                 ledger_extraction=bool(
                     entry.get("ledger_extraction", False)
@@ -360,25 +356,18 @@ def is_proposal_type(type_id: str) -> bool:
     return bool(doc and doc.proposal_extraction)
 
 
-def is_cic_s10a_type(type_id: str) -> bool:
-    """True when this document type is a CIC S10A credit-relationship report."""
-
-    doc = get_type(type_id)
-    return bool(doc and doc.cic_s10a_extraction)
-
-
-def is_cic_r20_type(type_id: str) -> bool:
-    """True when this document type is a CIC R20 collateral report."""
-
-    doc = get_type(type_id)
-    return bool(doc and doc.cic_r20_extraction)
-
-
 def is_sitevisit_type(type_id: str) -> bool:
     """True when this document type is a site-visit report to be extracted."""
 
     doc = get_type(type_id)
     return bool(doc and doc.sitevisit_extraction)
+
+
+def is_sitevisit_photo_type(type_id: str) -> bool:
+    """True when this document type is a site-visit photograph."""
+
+    doc = get_type(type_id)
+    return bool(doc and doc.sitevisit_photo_extraction)
 
 
 def is_ledger_type(type_id: str) -> bool:

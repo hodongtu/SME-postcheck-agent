@@ -1,7 +1,16 @@
 """BRD 2.1 - Verify the customer information.
 
-Compare what head office returned (BEP) against the customer's documents and
+Compare what head office returned (LOS) against the customer's documents and
 the business unit's site visit.
+
+V08 and V09 compare a third thing: what the RM keyed into LOS by hand against
+what the paperwork actually says. Same subject, two accounts of it, one typed
+from the other - so a difference is either a keying error or a document that does
+not support what was entered, and both are worth a reviewer's attention.
+
+The functions here DECIDE; they do not declare. Which of them is a rule, under
+what id, title and severity, and on which facts, is in src/rules/registry.py -
+one catalogue for all of them, so there is one place to look.
 """
 
 from __future__ import annotations
@@ -17,19 +26,20 @@ from src.rules._compare import (
     norm_year,
     rows,
 )
-from src.rules.engine import Rule, Verdict, failed, passed
+from src.rules.engine import Verdict, failed, passed, variance_pct
+from src.utils.common import normalize_text
 
 
-def _against_bep(
+def _against_los(
     facts: Facts,
-    bep_path: str,
+    los_path: str,
     doc_path: str,
     label: str,
     normalizer: Callable[[Any], str],
 ) -> Verdict:
-    """Compare one BEP field against the same field on every document read."""
+    """Compare one LOS field against the same field on every document read."""
 
-    expected = facts.get(bep_path)
+    expected = facts.get(los_path)
     normalized_expected = normalizer(expected)
     pairs = rows(facts.get(doc_path))
 
@@ -37,7 +47,7 @@ def _against_bep(
         # The fact is present but every cell is blank: there is nothing to
         # compare, and passing quietly here is exactly the green-on-empty bug.
         return failed(
-            f"{label} trên BEP là “{expected}” nhưng không chứng từ nào đọc được "
+            f"{label} trên LOS là “{expected}” nhưng không chứng từ nào đọc được "
             f"{label.lower()} để đối chiếu"
         )
 
@@ -46,7 +56,7 @@ def _against_bep(
     if mismatched:
         detail = "; ".join(f"{name}: “{value}”" for name, value in mismatched)
         return failed(
-            f"{label} trên BEP là “{expected}”; lệch ở {len(mismatched)}/{len(pairs)} "
+            f"{label} trên LOS là “{expected}”; lệch ở {len(mismatched)}/{len(pairs)} "
             f"chứng từ — {detail}"
         )
     return passed(
@@ -54,80 +64,163 @@ def _against_bep(
     )
 
 
-def _check_customer_name(facts: Facts, settings: dict) -> Verdict:
-    return _against_bep(facts, "bep.customer_name", "doc.customer_name_values",
+def check_customer_name(facts: Facts, settings: dict) -> Verdict:
+    return _against_los(facts, "los.customer_name", "doc.customer_name_values",
                         "Tên khách hàng", norm_text)
 
 
-def _check_tax_code(facts: Facts, settings: dict) -> Verdict:
-    return _against_bep(facts, "bep.tax_code", "doc.tax_code_values",
+def check_tax_code(facts: Facts, settings: dict) -> Verdict:
+    return _against_los(facts, "los.tax_code", "doc.tax_code_values",
                         "Mã số thuế", norm_digits)
 
 
-def _check_address(facts: Facts, settings: dict) -> Verdict:
+def check_address(facts: Facts, settings: dict) -> Verdict:
     normalizer = make_address_normalizer(settings.get("address_abbreviations", {}))
-    return _against_bep(facts, "bep.address", "doc.address_values",
+    return _against_los(facts, "los.address", "doc.address_values",
                         "Địa chỉ", normalizer)
 
 
-def _check_owner_name(facts: Facts, settings: dict) -> Verdict:
-    return _against_bep(facts, "bep.owner_name", "doc.owner_name_values",
+def check_owner_name(facts: Facts, settings: dict) -> Verdict:
+    return _against_los(facts, "los.owner_name", "doc.owner_name_values",
                         "Tên chủ doanh nghiệp", norm_text)
 
 
-def _check_owner_id_number(facts: Facts, settings: dict) -> Verdict:
-    return _against_bep(facts, "bep.owner_id_number", "doc.owner_id_number_values",
+def check_owner_id_number(facts: Facts, settings: dict) -> Verdict:
+    return _against_los(facts, "los.owner_id_number", "doc.owner_id_number_values",
                         "Số CCCD chủ doanh nghiệp", norm_digits)
 
 
-def _check_owner_birth_year(facts: Facts, settings: dict) -> Verdict:
-    return _against_bep(facts, "bep.owner_birth_year", "doc.owner_birth_year_values",
+def check_owner_birth_year(facts: Facts, settings: dict) -> Verdict:
+    return _against_los(facts, "los.owner_birth_year", "doc.owner_birth_year_values",
                         "Năm sinh chủ doanh nghiệp", norm_year)
 
 
-def _check_industry(facts: Facts, settings: dict) -> Verdict:
-    """BEP, the business registration and the site visit must describe one business."""
+def check_industry(facts: Facts, settings: dict) -> Verdict:
+    """LOS, the business registration and the site visit must describe one business."""
 
-    on_bep = facts.get("bep.industry")
+    on_los = facts.get("los.industry")
     on_registration = facts.get("doc.industry_on_registration")
     on_sitevisit = facts.get("doc.industry_on_sitevisit")
 
     differences: list[str] = []
-    if not industry_matches(on_bep, on_registration):
+    if not industry_matches(on_los, on_registration):
         differences.append(f"ĐKKD ghi “{on_registration}”")
-    if not industry_matches(on_bep, on_sitevisit):
+    if not industry_matches(on_los, on_sitevisit):
         differences.append(f"khảo sát thực địa ghi “{on_sitevisit}”")
 
     if differences:
-        return failed(f"Ngành nghề trên BEP là “{on_bep}”; " + ", ".join(differences))
+        return failed(f"Ngành nghề trên LOS là “{on_los}”; " + ", ".join(differences))
     return passed(
-        f"Ngành nghề “{on_bep}” nhất quán giữa BEP, ĐKKD và khảo sát thực địa "
-        f"(mã GSO {facts.get('bep.gso_code')})"
+        f"Ngành nghề “{on_los}” nhất quán giữa LOS, ĐKKD và khảo sát thực địa "
+        f"(mã GSO {facts.get('los.gso_code')})"
     )
 
 
-# Answers BRD row 13 (section 2.1) - one row, seven identity fields.
-RULES: tuple[Rule, ...] = (
-    Rule("V01", "Tên khách hàng khớp giữa BEP và chứng từ",
-         "Tên KH trên mọi chứng từ trùng với tên trên BEP", "high",
-         ("bep.customer_name", "doc.customer_name_values"), _check_customer_name),
-    Rule("V02", "Mã số thuế khớp giữa BEP và chứng từ",
-         "MST trên mọi chứng từ trùng với MST trên BEP", "high",
-         ("bep.tax_code", "doc.tax_code_values"), _check_tax_code),
-    Rule("V03", "Địa chỉ khớp giữa BEP và chứng từ",
-         "Địa chỉ trên mọi chứng từ trùng với địa chỉ trên BEP", "medium",
-         ("bep.address", "doc.address_values"), _check_address),
-    Rule("V04", "Tên chủ doanh nghiệp khớp giữa BEP và chứng từ",
-         "Tên CDN trên mọi chứng từ trùng với tên trên BEP", "high",
-         ("bep.owner_name", "doc.owner_name_values"), _check_owner_name),
-    Rule("V05", "Số CCCD chủ doanh nghiệp khớp giữa BEP và chứng từ",
-         "CCCD trên mọi chứng từ trùng với CCCD trên BEP", "high",
-         ("bep.owner_id_number", "doc.owner_id_number_values"), _check_owner_id_number),
-    Rule("V06", "Năm sinh chủ doanh nghiệp khớp giữa BEP và chứng từ",
-         "Năm sinh CDN trên mọi chứng từ trùng với năm sinh trên BEP", "medium",
-         ("bep.owner_birth_year", "doc.owner_birth_year_values"), _check_owner_birth_year),
-    Rule("V07", "Ngành nghề khớp giữa BEP, ĐKKD và khảo sát thực địa",
-         "Ngành nghề trên ba nguồn cùng mô tả một hoạt động", "medium",
-         ("bep.industry", "bep.gso_code", "doc.industry_on_registration",
-          "doc.industry_on_sitevisit"), _check_industry),
-)
+def check_sitevisit_online(facts: Facts, settings: dict) -> Verdict:
+    """The industry as the RM keyed it in, against the file and the report filed."""
+
+    keyed = facts.get("los.sitevisit_online.industry")
+    on_file = facts.get("los.industry")
+    filed = facts.get("doc.industry_on_sitevisit")
+
+    differences = []
+    if not industry_matches(keyed, on_file):
+        differences.append(f"hồ sơ LOS ghi “{on_file}”")
+    if not industry_matches(keyed, filed):
+        differences.append(f"báo cáo khảo sát ghi “{filed}”")
+
+    if differences:
+        return failed(
+            f"Ngành nghề RM nhập khi khảo sát là “{keyed}”; " + ", ".join(differences)
+        )
+    return passed(
+        f"Ngành nghề “{keyed}” nhất quán giữa khảo sát RM nhập, hồ sơ LOS và báo cáo "
+        f"khảo sát nộp kèm"
+    )
+
+
+def check_financials_online(facts: Facts, settings: dict) -> Verdict:
+    """The RM keyed in the SAME statements that were filed - period and kind.
+
+    Deliberately not the figures. Whether the numbers agree is a question about
+    the content; this one asks whether the two sides are even talking about the
+    same document, and a mismatch here would make any figure comparison
+    meaningless anyway.
+
+    Report kind reaches both facts through `financial_report_types` in
+    config/programs.yaml: each side prints its own wording, and a label the table
+    does not know leaves the fact missing rather than being guessed into place.
+    """
+
+    keyed_year = str(facts.get("los.financials_online.report_year"))
+    filed_year = str(facts.get("doc.financials.report_year"))
+    keyed_type = facts.get("los.financials_online.report_type")
+    filed_type = facts.get("doc.financials.report_type")
+
+    differences = []
+    if keyed_year != filed_year:
+        differences.append(
+            f"kỳ báo cáo — RM nhập năm {keyed_year}, hồ sơ nộp năm {filed_year}"
+        )
+    if norm_text(keyed_type) != norm_text(filed_type):
+        differences.append(
+            f"loại báo cáo — RM nhập “{keyed_type}”, hồ sơ nộp “{filed_type}”"
+        )
+
+    if differences:
+        return failed(
+            "BCTC RM nhập không cùng một báo cáo với hồ sơ: " + "; ".join(differences)
+        )
+    return passed(f"BCTC RM nhập và hồ sơ nộp cùng là “{filed_type}” kỳ {filed_year}")
+
+
+def check_persona_photos(facts: Facts, settings: dict) -> Verdict:
+    """Do the site-visit photos show what this customer's persona should show.
+
+    The model never sees the persona and never decides the verdict: it labels
+    each photo from a closed vocabulary, and the counting happens here. That is
+    what keeps this criterion testable from a JSON fixture like the other 39,
+    and what stops the answer from being whatever the model was nudged toward.
+    """
+
+    if not facts.get("los.is_site_visit"):
+        return passed(
+            "LOS không yêu cầu khảo sát thực địa với hồ sơ này nên không cần đối "
+            "chiếu ảnh"
+        )
+
+    persona = str(facts.get("los.persona"))
+    table = {normalize_text(name): entry
+             for name, entry in (settings.get("persona_evidence") or {}).items()}
+    entry = table.get(normalize_text(persona))
+    if entry is None:
+        return failed(
+            f"Chân dung “{persona}” chưa khai trong persona_evidence "
+            f"(config/programs.yaml) nên không biết ảnh cần cho thấy gì"
+        )
+
+    expected = {normalize_text(marker) for marker in entry["expected"]}
+    minimum = int(entry["min_markers"])
+
+    photos = facts.get("doc.sitevisit_photo_evidence")
+    seen: dict[str, list[str]] = {}
+    for photo in photos:
+        for marker in photo.get("markers") or []:
+            if normalize_text(marker) in expected:
+                seen.setdefault(normalize_text(marker), []).append(
+                    str(photo.get("filename", "?"))
+                )
+
+    detail = "; ".join(
+        f"{marker} ({', '.join(sorted(set(files)))})" for marker, files in sorted(seen.items())
+    )
+    if len(seen) < minimum:
+        return failed(
+            f"Chân dung “{persona}” cần ít nhất {minimum} dấu hiệu trong "
+            f"{len(expected)} dấu hiệu kỳ vọng, {len(photos)} ảnh chỉ cho thấy "
+            f"{len(seen)}" + (f": {detail}" if detail else " — không dấu hiệu nào")
+        )
+    return passed(
+        f"Chân dung “{persona}”: {len(photos)} ảnh cho thấy {len(seen)}/{minimum} "
+        f"dấu hiệu kỳ vọng — {detail}"
+    )

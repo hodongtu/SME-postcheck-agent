@@ -21,7 +21,7 @@ XML_SAMPLE = ROOT / "samples" / "case_demo" / "ho_so_tai_chinh" / "bao_cao_tai_c
 # statement. Written out rather than recorded from a run so that a change to the
 # prompt's schema shows up here as a decision instead of a surprise.
 LLM_SHAPED_RESULT = {
-    "customer": {"ten": "CÔNG TY MẪU", "ma_so_thue": "0101234567"},
+    "customer": {"name": "CÔNG TY MẪU", "tax_code": "0101234567"},
     "document_type": "BCTC riêng lẻ",
     "reporting_period": {
         "period_label": "Năm 2025",
@@ -112,7 +112,7 @@ def main() -> int:
     # --- what a rule actually reads ----------------------------------------
     for name, payload in (("XML", from_xml), ("LLM", from_llm)):
         customer = payload.get("customer")
-        if not isinstance(customer, dict) or set(customer) < {"ten", "ma_so_thue"}:
+        if not isinstance(customer, dict) or set(customer) < {"name", "tax_code"}:
             problems.append(
                 f"{name} path has no usable 'customer' block - V01, V02 and F01 lose "
                 f"this document as a source of the name and tax code"

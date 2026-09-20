@@ -73,11 +73,11 @@ metric khớp theo mã sai hệ; đường XML khớp bằng nhãn và cho đún
 **Báo cáo CIC là bản scan thuần** — PDF chỉ chứa ảnh, không lớp text — nên nó là
 hồ sơ mẫu duy nhất buộc `src/utils/reading/ocr.py` phải chạy. 593 dòng OCR đó
 trước nay không bài kiểm nào chạm tới. `verify_samples` khẳng định file này
-không có `/Font`, và OCR đọc lại được đúng mã số thuế lẫn cụm `Nợ đủ tiêu chuẩn`
-— dấu tiếng Việt là thứ OCR sai đầu tiên. Cần `brew install tesseract
+không có `/Font`, và OCR đọc lại được đúng mã số thuế lẫn cụm
+`Ngành nghề hoạt động` — dấu tiếng Việt là thứ OCR sai đầu tiên. Cần `brew install tesseract
 tesseract-lang`; thiếu nó thì bài kiểm đỏ kèm hướng dẫn cài.
 
-Bảy file `.docx` chỉ đọc được khi đã `pip install python-docx`; chưa cài thì
+Ba file `.docx` chỉ đọc được khi đã `pip install python-docx`; chưa cài thì
 chúng vẫn nhận diện được theo tên file, chỉ là không có nội dung.
 
 ## Kiểm thử
@@ -86,17 +86,18 @@ chúng vẫn nhận diện được theo tên file, chỉ là không có nội d
 python3 testing/run_checks.py
 ```
 
-Mười chín bài kiểm, chạy trong vài giây, **không gọi LLM và không cần DB**. Làm
-được vì `Facts` là ranh giới duy nhất giữa phần bẩn (OCR, LLM, SQL) và phần sạch
-(bộ luật), nên bộ luật test được từ file JSON.
+Hai mươi bài kiểm, chạy trong vài giây, **không gọi LLM và không cần DB thật**.
+Làm được vì `Facts` là ranh giới duy nhất giữa phần bẩn (OCR, LLM, SQL) và phần
+sạch (bộ luật), nên bộ luật test được từ file JSON. Riêng `verify_dummy_db` chạy
+cả phần truy vấn, trên SQLite dựng tại chỗ.
 
 ## Kiến trúc
 
 ```
 đọc hồ sơ  →  trích xuất  →  Facts  →  chấm luật  →  kết xuất
-1 case dir     5 pass LLM     55 fact   33 rule       Markdown/PDF/JSON
+1 case dir     4 pass LLM     78 fact   40 rule       Markdown/PDF/JSON
                               ↑
-                     7 tool truy vấn SQL
+                    15 tool truy vấn SQL
 ```
 
 Năm bước gọi tuần tự trong `src/pipeline.py`. Không LangGraph: credit memo cần
@@ -104,24 +105,28 @@ graph vì có bốn nhánh agent, post-check chỉ có một đường chạy.
 
 | Tầng | Ở đâu |
 |---|---|
-| 7 tool truy vấn | [src/tools/](src/tools/) — `bep` `bcde` `t24` `virac` |
-| 5 pass trích xuất (nối dây) | [src/passes.py](src/passes.py) |
+| 15 tool truy vấn | [src/tools/](src/tools/) — `los` `cic` `blwl` `amc` `t24` `portfolio` `virac` |
+| 4 pass trích xuất (nối dây) | [src/passes.py](src/passes.py) |
 | Prompt trích xuất (copy CreditMemo) | [src/agents/extraction/](src/agents/extraction/) |
 | Danh mục fact | [src/facts.py](src/facts.py) |
 | Cổng thiếu dữ liệu | [src/rules/engine.py](src/rules/engine.py) |
-| 33 rule | [src/rules/](src/rules/) — `identity` `fraud` `dossier` `criteria` `operation` `ews` |
+| 40 rule | [src/rules/](src/rules/) — `identity` `fraud` `dossier` `criteria` `operation` `ews` |
 | Ngưỡng & checklist | [config/programs.yaml](config/programs.yaml) |
 | Khung báo cáo | [src/templates/post-check-template.md](src/templates/post-check-template.md) |
 | Bộ đọc template | [src/report/templates.py](src/report/templates.py) |
 
 ### Trích xuất dùng lại nguyên của CreditMemo
 
-Năm module trong `src/agents/extraction/` được **copy nguyên vẹn** từ
+Ba module trong `src/agents/extraction/` được **copy nguyên vẹn** từ
 `2. SME_creditmemo`, không sửa prompt: `financial_statement_extraction`,
-`proposal_extraction`, `sitevisit_extraction`, `cic_s10a_extraction`,
-`cic_r20_extraction`. Bộ tài liệu khách hàng gần như trùng nhau, và chúng đã
-tinh chỉnh qua nhiều vòng thật. Một rule so sánh chỉ đúng bằng con số nó được
-đưa.
+`proposal_extraction`, `sitevisit_extraction`. Bộ tài liệu khách hàng gần như
+trùng nhau, và chúng đã tinh chỉnh qua nhiều vòng thật. Một rule so sánh chỉ
+đúng bằng con số nó được đưa.
+
+Hai pass CIC (`cic_s10a_extraction`, `cic_r20_extraction`) **đã bỏ**: nhóm nợ,
+BL/WL và TSBĐ đăng ký tại CIC đều query từ tool ở hai thời điểm — ngày phê duyệt
+và ngày rà soát — nên một file trong hồ sơ chỉ mang được một trong hai mốc. Cần
+lại thì lấy từ `2. SME_creditmemo/src/agents/extraction/`.
 
 `src/passes.py` là phần **nối dây**, không phải phần trích xuất: pass nào chạy
 trên loại tài liệu nào, LLM lấy từ đâu trên `Config`, kết quả ghi vào ô nào của
@@ -152,17 +157,55 @@ chứng từ thật thì đặt vào một thư mục **tên bất kỳ khác ba
 nằm ngoài repo:
 
 ```
-samples/case_that/ho_so_noi_bo/thong_tin_cic_cua_khach_hang_vay.pdf
+samples/case_that/ho_so_tai_chinh/bao_cao_tai_chinh_2025.pdf
 ```
 
 Tên file quyết định đầu mục hồ sơ, nên đặt theo từ khoá trong
-`document_matrix.yaml`. Mã biểu mẫu cũng nhận được: `CIC_S10A.pdf` vào pass
-S10A, `CIC_R20.pdf` vào pass R20.
+`document_matrix.yaml`.
+
+### Database dummy để chạy thử cả phần truy vấn
+
+`samples/dummy_db/make_dummy_db.py` dựng một SQLite đúng hình dạng các view mà
+`src/tools/` đang gọi, với hai khách hàng: một khớp hoàn toàn hồ sơ
+`samples/case_demo` (chấm ra Đạt) và một lệch ngưỡng ở mọi bảng. Nhờ nó, toàn bộ
+luồng — truy vấn, chấm luật, kết xuất — chạy được không cần PROD và không tốn
+một call LLM:
+
+```bash
+python3 samples/dummy_db/make_dummy_db.py
+```
+
+```python
+from src.tools._executor import sqlite_executor
+Config(query_executor=sqlite_executor("samples/dummy_db/postcheck_dummy.sqlite"))
+```
+
+`verify_dummy_db` chấm đúng việc này, bốn điều: 11 câu SQL trong `src/tools/` và
+11 bảng trong dataset **phủ nhau hai chiều** (bảng nào không ai select cũng là
+lỗi, vì đó là dấu hiệu một tool đã bị xoá mà bảng còn sót), mọi câu chạy được,
+mọi fact nguồn hệ thống có giá trị, và các rule đọc chúng ra được kết luận cho cả
+hai khách hàng. Tên bảng và tên cột trong đó là **tên tạm**, sẽ đổi cùng lúc với
+SQL thật.
 
 ### Quy ước ngôn ngữ
 
-Tiếng Anh: biến, hàm, comment, docstring, prompt, khoá JSON, đường dẫn fact,
-khoá YAML, giá trị enum. Tiếng Việt: chỉ những chuỗi in ra báo cáo. Ngoại lệ có
+Tiếng Anh: biến, hàm, comment, docstring, prompt, **khoá JSON của extraction**,
+đường dẫn fact, khoá YAML, giá trị enum. Tiếng Việt: chỉ những chuỗi in ra báo
+cáo.
+
+Riêng trong prompt trích xuất, tiếng Việt **bắt buộc phải có ở phần giá trị**: đó
+là tiêu đề mà model phải tìm trong chứng từ (`"Số cuối kỳ"`) và nhãn mà schema
+phải sinh ra (`"Năm YYYY"`). Dịch chúng sang tiếng Anh là làm hỏng trích xuất trên
+một tài liệu viết bằng tiếng Việt. Ranh giới nằm ở **khoá**: khoá đi vào code của
+dự án, giá trị thì không.
+
+Khoá được kiểm bằng **một danh sách khai báo** (`EXTRACTION_SCHEMA_KEYS`), không
+phải bằng luật chính tả — vì tiếng Việt không dấu (`ten`, `ma_so_thue`,
+`dau_hieu`) là ASCII snake_case hợp lệ và lọt qua mọi phép kiểm ký tự. Thứ duy
+nhất bắt được nó là một người đọc khoá đó một lần, và việc phải cập nhật danh
+sách chính là lúc đó.
+
+Ngoại lệ có
 chủ ý là `type_id` trong `document_matrix.yaml`, giữ nguyên để không fork bản
 copy. `testing/checks/verify_code_language.py` giữ đường ranh này bằng AST.
 
@@ -184,7 +227,7 @@ Markdown, `{{Placeholder}}` — cùng bộ đọc `_split_frontmatter` bê từ
 | Hai đoạn Nhận định (2.2 và 2.4) | LLM, theo hướng dẫn nằm cuối template |
 
 Khác CreditMemo ở một điểm có chủ ý: bên đó LLM điền cả skeleton, ở đây ô
-`Đạt`/`Không đạt` là đầu ra của 33 rule Python tất định (quyết định D2), nên
+`Đạt`/`Không đạt` là đầu ra của 39 rule Python tất định (quyết định D2), nên
 Python điền bảng còn LLM chỉ viết hai đoạn nhận định.
 
 Hai thứ template tự chịu trách nhiệm, và có bài kiểm:
@@ -235,21 +278,192 @@ tự tuyên bố là chưa kiểm được để né kết luận.
 
 Cổng này gánh việc thật, đo được: gỡ nó ra rồi gọi thẳng `check` trên hồ sơ đủ
 dữ liệu thiếu đúng một fact, **14/84 tổ hợp trả về Đạt** thay vì vỡ — trong đó
-C03 và O03 báo "KH và CDN đều không nằm trong BL/WL" khi tra cứu không trả về
+C04 và O03 báo "KH và CDN đều không nằm trong BL/WL" khi tra cứu không trả về
 gì, và E02 báo tương tự tại thời điểm post-check. 56 crash, 14 trả Không đạt.
 Không thể trông vào việc rule tự vỡ.
 `testing/checks/verify_missing_data_gate.py` giữ tính chất này.
 
-## Bảy tiêu chí luôn ở trạng thái Thiếu dữ liệu
+## Sáu tiêu chí luôn ở trạng thái Thiếu dữ liệu
 
-Không pass nào của CreditMemo đọc được CCCD và năm sinh CDN, chữ ký/con dấu,
-chữ ký điện tử trên BCTC, số hiệu chứng từ, ngành nghề trên ĐKKD, hay file
-BL/WL tra cứu tại thời điểm post-check. Đây là **quyết định có ý thức**, không
-phải khuyết tật: bản này không viết pass mới cho chúng.
+Không pass nào của CreditMemo đọc được tên, CCCD và năm sinh CDN, chữ ký/con
+dấu, chữ ký điện tử trên BCTC, hay ngành nghề trên ĐKKD. Đây là **quyết định có
+ý thức**, không phải khuyết tật: bản này không viết pass mới cho chúng.
 
-Tám fact đó khai tường minh trong `MANUAL_FACTS` (`src/facts.py`) kèm lý do in
-ra phụ lục báo cáo, và chặn bảy rule: **V05, V06, V07, F02, P04, P05, E02**.
+Sáu fact đó khai tường minh trong `MANUAL_FACTS` (`src/facts.py`) kèm lý do in
+ra phụ lục báo cáo, và chặn sáu rule: **V04, V05, V06, V07, P04, P05**.
 `verify_manual_facts` chạy hai chiều để con số này không âm thầm trôi.
+
+Hai fact đi đường ngược lại: `t24.outstanding` (dư nợ) và `portfolio.facilities`
+(danh mục tín dụng tại TCB) được thu thập và in ở mục 1.2 nhưng **chưa rule nào
+chấm** — tiêu chí đối chiếu sẽ bổ sung sau. Chúng khai trong `DISPLAY_ONLY_FACTS`
+vì mặc định của `verify_needs_paths` là coi "fact không ai đọc" là lỗi, và mặc
+định đó nên giữ.
+
+Riêng Portfolio là **nguồn thứ phát**: nó không giữ bản ghi gốc nào mà được team
+portfolio dựng lại từ LOS/T24/CIC. Hai hệ quả mà một hệ thống gốc không có — nó
+có thể **trễ** so với T24, và cấu trúc cột là của team portfolio nên có thể **dựng
+lại**. Vì vậy rows đi qua nguyên dạng, và chưa rule nào so nó với T24: một tiêu
+chí đối chiếu dữ liệu thứ phát với hệ thống gốc phải khai ngưỡng dung sai cho độ
+trễ đó trước.
+
+### Bảy nhóm dữ liệu, và vì sao nhãn nguồn phải tách làm hai
+
+Nghiệp vụ đối chiếu giữa **bảy nhóm**: `LOS` · `T24` · `Portfolio` ·
+`BL/WL & AMC` · `CIC` · `Virac` · `Chứng từ`. (Nhóm thứ tám, `Hồ sơ`, chỉ chứa
+`case.postcheck_date` — tham số của lượt chạy, không phải dữ liệu về khách hàng.)
+
+Mỗi fact trong `FACT_KEYS` mang một `FactSpec` **ba trường**, không phải hai:
+
+```python
+class FactSpec(NamedTuple):
+    category: str     # một trong bảy nhóm - báo cáo phân loại theo cái này
+    delivery: str     # query | dossier | run - ai điền fact
+    description: str  # tiếng Việt, in thẳng vào báo cáo
+```
+
+Hai trường vì đó là **hai câu hỏi khác nhau**, và chúng tách nhau đúng lúc BCTC
+với sitevisit online được xếp vào nhóm chứng từ: chúng là *dữ liệu chứng từ*
+(category) nhưng *do truy vấn điền* (delivery). Một cột không nói được cả hai, và
+nửa bị mất chính là nửa quyết định fact có bị đánh dấu thiếu khi chạy không có
+database — báo cáo sẽ im lặng thay vì nói không tra được.
+
+Đường dẫn fact giữ theo **nơi dữ liệu đến** (`los.financials_online.*`), nhóm hiển
+thị theo **dữ liệu đó là gì** (`Chứng từ`). `db_facts()` đọc `delivery`, không đọc
+category.
+
+Bốn khẳng định trong `verify_needs_paths` giữ cho bảng phân loại không trôi: mọi
+category phải nằm trong danh sách bảy nhóm, mọi delivery phải hợp lệ, **mọi nhóm
+phải có ít nhất một fact**, và mỗi dòng trong bảng thu thập của báo cáo phải mang
+đúng nhãn của chính các fact nó phủ.
+
+### Bốn loại thông tin trên LOS, bốn tool
+
+LOS không phải một dòng rộng mà là bốn thứ khác hẳn nhau về grain và về mục đích:
+**hồ sơ** (phê duyệt, hạn mức, người đại diện, kế toán trưởng), **top 5 cổ đông**,
+**khảo sát thực địa RM nhập**, **BCTC RM nhập**.
+
+Hai cái sau quan trọng hơn vẻ ngoài: đó là lời khai của chính RM về cùng những
+sự việc mà chứng từ ghi lại, gõ tay vào hệ thống — nên chúng là **nguồn thứ hai
+để đối chiếu**, và lệch giữa cái RM gõ với cái giấy tờ nói đúng là loại phát hiện
+cuộc rà soát này sinh ra để tìm (V08, V09). Chúng **không** thay thế việc đọc
+chứng từ.
+
+Cổ đông là **đối tượng tra cứu riêng**: mỗi người được tra BL/WL, AMC và nhóm nợ
+CIC như chính doanh nghiệp và chủ doanh nghiệp (C06 tại thời điểm phê duyệt, E08
+tại post-check). Nhóm nợ cổ đông tra theo **CCCD**, không theo MST — mã số thuế
+doanh nghiệp không nói gì về lịch sử tín dụng cá nhân.
+
+### Ba danh sách độc lập: BL/WL, AMC, CIC
+
+BL/WL và AMC là **hai danh sách riêng**, không phải hai khung nhìn của BCDE.
+AMC là luồng thu hồi nợ: có tên trong đó nghĩa là đối tượng đã vào quy trình xử
+lý nợ. Hai danh sách cùng hình dạng, cùng ngữ nghĩa mốc ngày, và cùng đi qua một
+hàm khớp `_match_list` trong `src/pipeline.py` — nên chúng luôn so sánh được với
+nhau — nhưng là hai bảng, hai fact, hai tool.
+
+AMC tại thời điểm phê duyệt **vào điều kiện tín chấp** (C05, và `unsecured_eligible`
+đọc nó), tại post-check thành tiêu chí nhận diện rủi ro sớm (E07). Cổ đông dính
+danh sách thì **không** vào `unsecured_eligible`: đó là tín hiệu rủi ro về sở hữu,
+còn việc nó có loại doanh nghiệp khỏi tín chấp hay không là câu hỏi chính sách
+chưa ai trả lời — trả lời ngầm ở đó sẽ âm thầm làm O03 chặt hơn chương trình quy
+định.
+
+### Ảnh khảo sát thực địa: model NHÌN, Python CHẤM
+
+BRD dòng 14 nhắc tới *hình ảnh* khảo sát thực địa. Pass thị giác duy nhất của dự
+án ([sitevisit_photo_extraction.py](src/agents/extraction/sitevisit_photo_extraction.py))
+**gán nhãn, không phán quyết**: nó nói trong ảnh có gì, còn việc "thế có khớp chân
+dung khách hàng không" là hàm thuần đọc `persona_evidence` trong config. Nhờ vậy
+V10 vẫn kiểm thử được từ file JSON như 39 tiêu chí kia — không model, không mạng.
+
+Hai ràng buộc đi kèm, và cả hai đều có bài kiểm giữ:
+
+- **Từ vựng đưa cho model là HỢP của mọi chân dung**, không phải danh sách của
+  riêng khách hàng này. Đưa đúng danh sách kỳ vọng vào là mời model xác nhận điều
+  ta đang muốn nghe.
+- **Nhãn ngoài từ vựng bị loại** và ghi vào `extraction_notes`, để một chữ model
+  tự nghĩ ra không âm thầm thành bằng chứng một tiêu chí đem đếm.
+
+Cờ `los.is_site_visit` quyết định ảnh có bắt buộc không — đây là lần đầu checklist
+có mục **phụ thuộc dữ liệu** (`when: site_visit`) chứ không tĩnh theo chương
+trình. Hồ sơ không cần khảo sát thì V10 **Đạt**, không phải Thiếu dữ liệu: dùng
+`Facts.set_empty()` để nói "rỗng ở đây là câu trả lời", khác với `[]` mặc định
+vốn nghĩa là chưa thu thập được.
+
+**Phần lớn hồ sơ thật gộp ảnh vào một PDF, và mỗi trang thường dán nhiều ảnh** —
+nên pass tách tài liệu theo hai cách:
+
+| Trang | Cách xử lý |
+|---|---|
+| có **≥2 ảnh nhúng** đủ lớn | tách **từng ảnh một**, ở độ phân giải gốc |
+| còn lại | render cả trang ở 150 DPI |
+
+Ngưỡng là hai chứ không phải một: một trang scan vốn là *một* ảnh nhúng chiếm trọn
+trang, và trang chỉ dán một ảnh thì render cũng cho kết quả tương đương — đồng thời
+render còn bắt được thứ vẽ bằng vector chứ không nhúng ảnh. Ảnh nhỏ hơn 200px mỗi
+chiều bị loại: đó là logo, đường kẻ, hoặc một mảnh của bản scan bị cắt ô, không
+phải ảnh chụp doanh nghiệp.
+
+Tách ảnh không chỉ đúng hơn mà còn **rẻ hơn nhiều**: bốn ảnh tách ra từ một trang
+collage nặng 4 KB mỗi ảnh, so với 79 KB nếu render cả trang — và mỗi ảnh giữ
+nguyên độ phân giải máy ảnh thay vì còn một phần tư.
+
+Tất cả đi trong **một lượt gọi** cho mỗi tài liệu; nhãn `tên.pdf (trang 2, ảnh 3)`
+để người rà soát mở đúng chỗ. `max_photo_images` chặn kích thước payload, ảnh bị
+cắt được **ghi vào `extraction_notes`** chứ không biến mất im lặng.
+
+Phần render trang dùng lại `_render_pdf_pages` của `ocr.py` — một định nghĩa duy
+nhất cho "trang PDF thành ảnh"; nếu nó bị đổi tên, import nổ lúc nạp module chứ
+không âm thầm trả về rỗng.
+
+Ảnh mẫu trong repo là ảnh tổng hợp, không có cảnh thật để model đọc. Chúng chỉ
+kiểm phần **xung quanh** pass — nhận diện đầu mục, định dạng, tách trang, nối dây;
+chất lượng nhận dạng chỉ đo được khi chạy thật.
+
+**Chưa làm:** xác thực ảnh (chỉnh sửa, chụp lại màn hình, EXIF thời gian và toạ
+độ). Đó là chống gian lận, khác hẳn đối chiếu chân dung.
+
+### Chữ ký số: có hay không, chưa phải hợp lệ hay không
+
+`src/utils/reading/digital_signature.py` trả lời **câu hỏi thứ nhất** bằng cách
+đọc cấu trúc file: XML có nút `<Signature>` của XMLDSig, PDF có signature
+dictionary kèm `/ByteRange`. Không LLM, không thư viện crypto, không mạng — nên
+P05 chấm được ngay cả khi chạy hoàn toàn offline.
+
+Hàm trả về **ba trạng thái**, và trạng thái thứ ba là điểm mấu chốt: `None` nghĩa
+là *không đọc được định dạng này* (`.docx`, `.xlsx`), khác hẳn `False` là *đã đọc
+và không có chữ ký*. Gộp hai thứ đó lại sẽ thành một phát hiện bất lợi cho khách
+hàng dựa trên một file chưa ai mở ra.
+
+Điều kiện `/ByteRange` không thừa: một signature dictionary **đã tạo mà chưa ký**
+vẫn tự khai `/Type/Sig`, nên nếu chỉ tìm dấu hiệu tên gọi thì ô ký trống sẽ đọc
+thành đã ký. `verify_digital_signature` chốt cả hai bẫy này.
+
+Fact này gắn với **loại tài liệu**, không gắn với việc trích xuất có đọc được số
+liệu hay không: chữ ký là thuộc tính của file, và một BCTC mà mô hình không phân
+tích nổi thì vẫn hoặc đã ký hoặc chưa. Nối theo kết quả trích xuất sẽ khiến một
+sự cố LLM trông như một hồ sơ chưa ký.
+
+**Chưa làm:** kiểm tra chữ ký có **hợp lệ** không — đúng chuỗi tin cậy, còn hạn,
+nội dung chưa bị sửa sau khi ký. Đó mới là thứ chống giả mạo, và cần thư viện
+crypto cùng danh sách CA tin cậy.
+
+### BL/WL là một truy vấn DANH SÁCH
+
+`get_blacklist_watchlist(as_of_date)` trả về **các bản ghi còn hiệu lực tại một
+mốc ngày**, không lọc theo khách hàng; việc khớp nằm ở `_match_blwl` trong
+`src/pipeline.py`: doanh nghiệp khớp theo MST, chủ doanh nghiệp khớp theo CCCD, và
+chỉ khi bản ghi không có MST lẫn CCCD mới khớp theo tên — trùng tên là dương tính
+giả mà người rà soát phải tự bác, nên nó là phương án cuối. Nhờ có mốc ngày, C04
+(thời điểm phê duyệt) và E02 (post-check) đọc cùng một danh sách mà ra hai kết
+luận khác nhau khi bản ghi được thêm vào giữa hai mốc.
+
+Danh sách **rỗng** nghĩa là **không ai bị liệt**, và các đối tượng được coi là
+sạch. Đây là lựa chọn của nghiệp vụ, và cái giá của nó cần biết: một lượt tra cứu
+hỏng bằng cách trả về 0 dòng — thay vì ném lỗi — sẽ không phân biệt được với một
+câu trả lời sạch. Truy vấn ném lỗi thì vẫn báo Thiếu dữ liệu như cũ.
+`verify_dummy_db` chốt hành vi này bằng cách xoá sạch hai bảng rồi đòi mọi fact
+BL/WL và AMC phải mang giá trị `False`, không phải một lý do.
 
 ## Còn phải làm trước khi dùng thật
 
@@ -257,7 +471,7 @@ ra phụ lục báo cáo, và chặn bảy rule: **V05, V06, V07, F02, P04, P05,
    trong hồ sơ đọc ra rỗng.
 2. **Đấu `query_executor`** — `callable(sql, params) -> list[dict]`. Tên view và
    cột trong `src/tools/` là chỗ cần khớp với hệ thống thật. Mỗi file là một hệ
-   thống: `bep` (phê duyệt), `bcde` (tra cứu lúc thẩm định), `t24` (core bank:
+   thống: `los` (phê duyệt), `bcde` (tra cứu lúc thẩm định), `t24` (core bank:
    hạn mức, TSBĐ, dư nghĩa vụ, giao dịch), `virac` (nguồn bên thứ ba duy nhất). Lưu ý yêu cầu đấu
    nối trong docstring của `get_bcde_blwl`: view phải trả một dòng cho mỗi đối
    tượng kể cả khi sạch, nếu không "không có dòng nào" vừa nghĩa là sạch vừa
@@ -265,7 +479,7 @@ ra phụ lục báo cáo, và chặn bảy rule: **V05, V06, V07, F02, P04, P05,
 3. **Xác nhận ba khoảng trống BRD ở trên** với nghiệp vụ, và duyệt hai dòng
    trong `not_a_check` (dòng 23 và 29 — bước chuẩn bị, không phải tiêu chí chấm).
 4. **Điền các TODO trong `config/programs.yaml`** — danh sách mã GSO ngành không
-   trọng tâm, `min_pdld_count`, checklist từng chương trình, và bổ sung
+   trọng tâm, `max_pdld_count`, checklist từng chương trình, và bổ sung
    `debt_group_by_label` khi gặp biến thể chữ nhóm nợ mới trên báo cáo CIC.
 5. **Nghiệm thu đầu-cuối** trên một hồ sơ thật đã có kết luận post-check thủ
    công. Cần xác nhận riêng rằng `total_capital` vẫn ra được từ bảng cân đối

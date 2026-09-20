@@ -30,6 +30,22 @@ WHERE   mst = :tax_code
 """
 
 
+OUTSTANDING_SQL = """
+SELECT  du_no
+FROM    v_du_no
+WHERE   mst = :tax_code
+"""
+
+# Account activity rolled up per period, over the window under review. Rows are
+# carried through as the view returns them: no criterion reads them yet, so
+# naming fields here would only invite one to be invented.
+TRANSACTION_SUMMARY_SQL = """
+SELECT  ky, ghi_no, ghi_co, so_du_binh_quan, so_luong_gd
+FROM    v_t24_giao_dich_tong_hop
+WHERE   mst = :tax_code AND ky BETWEEN :from_date AND :to_date
+ORDER   BY ky
+"""
+
 CASHFLOW_PDLD_SQL = """
 SELECT  COUNT(*) AS so_lan
 FROM    v_giao_dich_pdld
@@ -67,6 +83,40 @@ def get_collateral(
     return rows(executor, COLLATERAL_SQL, {"tax_code": tax_code})
 
 
+@tool("get_outstanding", extras={"heading": "[T24 — DƯ NỢ]"})
+def get_outstanding(
+    tax_code: Annotated[str, InjectedToolArg],
+    executor: Annotated[Any, InjectedToolArg],
+) -> dict:
+    """Total outstanding obligation at TCB (BRD row 10).
+
+    Collected and printed, not yet graded: the criterion comparing it against the
+    customer's cash flow is still to be defined. See DISPLAY_ONLY_FACTS in
+    src/facts.py.
+    """
+
+    row = one_row(executor, OUTSTANDING_SQL, {"tax_code": tax_code})
+    return {"outstanding": row.get("du_no")} if row else {}
+
+
+@tool("get_transaction_summary", extras={"heading": "[T24 — GIAO DỊCH TÀI KHOẢN THEO KỲ]"})
+def get_transaction_summary(
+    tax_code: Annotated[str, InjectedToolArg],
+    from_date: Annotated[str, InjectedToolArg],
+    to_date: Annotated[str, InjectedToolArg],
+    executor: Annotated[Any, InjectedToolArg],
+) -> list[dict]:
+    """The customer's account activity per period, approval date to review date.
+
+    Collected and printed, not graded: declared in DISPLAY_ONLY_FACTS
+    (src/facts.py). The graded half of BRD 2.4's cash-flow row is E06, which
+    counts overdue LDs - this is the context a reviewer reads beside it.
+    """
+
+    return rows(executor, TRANSACTION_SUMMARY_SQL,
+                {"tax_code": tax_code, "from_date": from_date, "to_date": to_date})
+
+
 @tool("get_cashflow_pdld", extras={"heading": "[GIAO DỊCH DÒNG TIỀN]"})
 def get_cashflow_pdld(
     tax_code: Annotated[str, InjectedToolArg],
@@ -74,7 +124,11 @@ def get_cashflow_pdld(
     to_date: Annotated[str, InjectedToolArg],
     executor: Annotated[Any, InjectedToolArg],
 ) -> dict:
-    """How many PDLD transactions occurred over the period under review."""
+    """How many LDs fell overdue (PDLD - Payment due LD) over the period under review.
+
+    The window is approval date to post-check date. The view and column names
+    below are placeholders until the real T24 objects are confirmed.
+    """
 
     row = one_row(executor, CASHFLOW_PDLD_SQL,
                   {"tax_code": tax_code, "from_date": from_date, "to_date": to_date})

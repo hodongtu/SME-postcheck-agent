@@ -50,8 +50,7 @@ class Config:
     financial_statement_llm: Any = None
     proposal_llm: Any = None
     sitevisit_llm: Any = None
-    cic_s10a_llm: Any = None
-    cic_r20_llm: Any = None
+    sitevisit_photo_llm: Any = None
     # The two commentary paragraphs in BRD 2.2 and 2.4
     commentary_llm: Any = None
     enable_commentary: bool = True
@@ -67,4 +66,13 @@ class Config:
     max_chars_per_document: int = 120_000
     # One call per (document, applicable pass). The real spend ceiling of a run.
     max_extraction_calls: int = 40
+    # A separate ceiling for photographs. One dossier can carry dozens, and each
+    # is a vision call - without this they would eat the whole extraction budget
+    # and starve the passes that read the actual documents.
+    max_photo_calls: int = 12
+    # Photo dossiers usually arrive as ONE PDF, and one page of it often holds
+    # several photographs - so the real size is the image count, not the file
+    # count and not the page count. Images beyond this are reported, not dropped
+    # silently.
+    max_photo_images: int = 12
     ocr_timeout_seconds: float | None = None

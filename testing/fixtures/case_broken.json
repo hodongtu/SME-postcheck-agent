@@ -1,28 +1,67 @@
 {
   "values": {
-    "bep.customer_name": "CÔNG TY TNHH THƯƠNG MẠI ABC",
-    "bep.tax_code": "0101234567",
-    "bep.address": "Số 10, P. Láng Hạ, Q. Đống Đa, TP. Hà Nội",
-    "bep.owner_name": "Nguyễn Văn A",
-    "bep.owner_id_number": "001080001234",
-    "bep.owner_birth_year": 1980,
-    "bep.gso_code": "4711",
-    "bep.industry": "Bán buôn tổng hợp",
-    "bep.program": "B1CP",
-    "bep.approved_limit": 5000000000,
-    "bep.approved_limit_by_product": {
+    "los.customer_name": "CÔNG TY TNHH THƯƠNG MẠI ABC",
+    "los.tax_code": "0101234567",
+    "los.address": "Số 10, P. Láng Hạ, Q. Đống Đa, TP. Hà Nội",
+    "los.owner_name": "Nguyễn Văn A",
+    "los.owner_id_number": "001080001234",
+    "los.owner_birth_year": 1980,
+    "los.gso_code": "4610",
+    "los.industry": "Bán lẻ tổng hợp",
+    "los.persona": "Sản xuất",
+    "los.is_site_visit": true,
+    "los.program": "B1CP",
+    "los.approved_limit": 5000000000,
+    "los.approved_limit_by_product": {
       "Vay ngắn hạn": 3000000000,
       "Thấu chi": 2000000000
     },
-    "bep.batch_valid_from": "2025-01-02",
-    "bep.batch_valid_to": "2025-06-30",
-    "bep.sto_revenue": 20000000000,
+    "los.batch_valid_from": "2025-01-02",
+    "los.batch_valid_to": "2025-06-30",
+    "los.sto_revenue": 20000000000,
+    "los.chief_accountant_name": "Lê Thị Kế Toán",
+    "los.shareholders": [
+      {
+        "name": "Nguyễn Văn A",
+        "id_number": "001080001234",
+        "stake_pct": 60.0
+      },
+      {
+        "name": "Đỗ Thị Hạnh",
+        "id_number": "001082007777",
+        "stake_pct": 40.0
+      }
+    ],
+    "los.sitevisit_online.industry": "Cho thuê kho bãi",
+    "los.sitevisit_online.address": "Số 99, Phường Khác, Quận Khác, Thành phố Hà Nội",
+    "los.financials_online.report_year": 2023,
+    "los.financials_online.report_type": "Báo cáo kiểm toán",
+    "los.financials_online.revenue": 5000000000,
+    "los.financials_online.net_profit": 100000000,
     "t24.booking_date": "2025-08-15",
     "t24.active_limit": 8000000000,
     "t24.active_limit_by_product": {
       "Vay ngắn hạn": 6000000000,
       "Thấu chi": 2000000000
     },
+    "t24.outstanding": 4000000000,
+    "t24.transactions_by_period": [
+      {
+        "ky": "2025-04",
+        "ghi_no": 4200000000,
+        "ghi_co": 4400000000,
+        "so_du_binh_quan": 1100000000,
+        "so_luong_gd": 142
+      }
+    ],
+    "portfolio.facilities": [
+      {
+        "san_pham": "Vay ngắn hạn",
+        "so_hop_dong": "HD2025/001",
+        "du_no": 2500000000,
+        "nhom_no": 1
+      }
+    ],
     "t24.ccr": 50,
     "collateral.items": [
       {
@@ -34,17 +73,45 @@
     "cic.owner_debt_group_at_approval": 2,
     "blwl.customer_at_approval": true,
     "blwl.owner_at_approval": false,
+    "blwl.shareholders_at_approval": {
+      "Nguyễn Văn A": true,
+      "Đỗ Thị Hạnh": false
+    },
+    "amc.customer_at_approval": true,
+    "amc.owner_at_approval": false,
+    "amc.shareholders_at_approval": {
+      "Nguyễn Văn A": false,
+      "Đỗ Thị Hạnh": true
+    },
+    "cic.shareholder_debt_groups_at_approval": {
+      "Nguyễn Văn A": 3,
+      "Đỗ Thị Hạnh": 1
+    },
     "cic.customer_debt_group_at_postcheck": 3,
     "cic.owner_debt_group_at_postcheck": 2,
     "blwl.customer_at_postcheck": true,
     "blwl.owner_at_postcheck": true,
+    "blwl.shareholders_at_postcheck": {
+      "Nguyễn Văn A": true,
+      "Đỗ Thị Hạnh": false
+    },
+    "amc.customer_at_postcheck": true,
+    "amc.owner_at_postcheck": false,
+    "amc.shareholders_at_postcheck": {
+      "Nguyễn Văn A": false,
+      "Đỗ Thị Hạnh": true
+    },
+    "cic.shareholder_debt_groups_at_postcheck": {
+      "Nguyễn Văn A": 4,
+      "Đỗ Thị Hạnh": 1
+    },
     "virac.revenue_by_year": {
       "2022": 50000000000
     },
     "virac.net_profit_by_year": {
       "2022": 9000000000
     },
-    "cashflow.pdld_count": 0,
+    "cashflow.pdld_count": 3,
     "doc.customer_name_values": [
       {
         "filename": "dkkd.pdf",
@@ -113,26 +180,6 @@
         "value": "1975"
       }
     ],
-    "doc.document_date_values": [
-      {
-        "filename": "dkkd.pdf",
-        "value": "2025-05-10"
-      },
-      {
-        "filename": "bctc_2022.pdf",
-        "value": "2024-03-30"
-      }
-    ],
-    "doc.document_number_values": [
-      {
-        "filename": "dkkd.pdf",
-        "value": "SH-001/2024"
-      },
-      {
-        "filename": "bctc_2022.pdf",
-        "value": "SH-001/2024"
-      }
-    ],
     "doc.signature_and_seal": [
       {
         "filename": "giay_dang_ky_kinh_doanh.pdf",
@@ -177,11 +224,25 @@
       {
         "filename": "anh_kho.jpg",
         "extension": ".jpg"
+      },
+      {
+        "filename": "ho_so_goc.zip",
+        "extension": ".zip"
       }
     ],
     "doc.industry_on_registration": "Kinh doanh bất động sản",
     "doc.industry_on_sitevisit": "Cho thuê kho bãi",
+    "doc.sitevisit_photo_evidence": [
+      {
+        "filename": "anh_1.jpg",
+        "markers": [
+          "van phong"
+        ],
+        "note": "Một phòng làm việc, không thấy xưởng hay máy móc"
+      }
+    ],
     "doc.financials.report_year": 2022,
+    "doc.financials.report_type": "Báo cáo thuế",
     "doc.financials.total_assets": 12000000000,
     "doc.financials.total_capital": 11000000000,
     "doc.financials.revenue_prior_year": 5000000000,

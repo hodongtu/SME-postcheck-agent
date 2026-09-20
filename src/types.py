@@ -47,11 +47,9 @@ class PostcheckDocument:
     proposal: dict[str, Any] | None = None
     proposal_error: str = ""
     sitevisit: dict[str, Any] | None = None
+    sitevisit_photos: dict[str, Any] | None = None
+    sitevisit_photos_error: str = ""
     sitevisit_error: str = ""
-    cic_s10a: dict[str, Any] | None = None
-    cic_s10a_error: str = ""
-    cic_r20: dict[str, Any] | None = None
-    cic_r20_error: str = ""
 
     @property
     def extension(self) -> str:

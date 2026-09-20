@@ -59,12 +59,12 @@ def build_extraction_chain(system_prompt: str, llm: Any):
             (
                 "human",
                 """
-                Tên file: {filename}
+                Filename: {filename}
 
-                Văn bản OCR:
+                Document text:
                 {content}
 
-                Trích xuất theo đúng schema JSON đã mô tả.
+                Extract exactly the JSON schema described above.
                 """,
             ),
         ]

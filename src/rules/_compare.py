@@ -50,7 +50,7 @@ def industry_matches(left: Any, right: Any) -> bool:
     """Two industry descriptions match when equal, or one contains the other.
 
     Industry is written at different levels of detail depending on the
-    document: BEP returns one short line, the business registration lists every
+    document: LOS returns one short line, the business registration lists every
     registered activity. Containment is the strictest test that still works.
     """
 

@@ -27,6 +27,9 @@ TAX_CODE = "0201123795"
 
 SAMPLES = ROOT / "samples"
 DEMO = "case_demo"
+# The scan whose text the OCR probe asserts on. Other PDFs in the dossier are
+# scans too, with their own content.
+OCR_PROBE_FILE = "bao_cao_khao_sat_thuc_dia.pdf"
 MULTI_PERIOD = "case_nhieu_ky_bctc"
 DEFICIENT = "case_thieu_ho_so"
 
@@ -131,7 +134,7 @@ def main() -> int:
     from src.passes import run_extraction_passes
     from src.pipeline import assemble_document_facts
 
-    run_extraction_passes(demo, config)
+    run_extraction_passes(demo, config, get_settings())
     facts = Facts()
     assemble_document_facts(facts, demo, settings)
     from_xml = (
@@ -168,6 +171,7 @@ def main() -> int:
 
     # --- the scanned document: the only thing that runs OCR ----------------
     scans = [d for d in demo if d.extension == ".pdf"]
+    probed = False
     if not scans:
         problems.append(
             f"{DEMO} has no PDF - the OCR path is never exercised by any check"
@@ -187,18 +191,30 @@ def main() -> int:
             )
             continue
         # Diacritics and a tax code are what OCR gets wrong first, so assert on
-        # those rather than on a character count.
-        for probe in (TAX_CODE, "Nợ đủ tiêu chuẩn"):
+        # those rather than on a character count - but only against the scan that
+        # actually carries them. The photo PDF beside it is a different fixture
+        # with different content, and probing it for the site-visit report's text
+        # would fail for the wrong reason.
+        if document.filename != OCR_PROBE_FILE:
+            continue
+        probed = True
+        for probe in (TAX_CODE, "Ngành nghề hoạt động"):
             if probe not in document.content:
                 problems.append(
                     f"{DEMO}/{document.filename}: OCR did not read back {probe!r}"
                 )
 
+    if scans and not probed:
+        problems.append(
+            f"{DEMO} has no {OCR_PROBE_FILE} - the OCR probe ran against nothing, "
+            f"so a broken OCR path would pass unnoticed"
+        )
+
     unreadable = sum(1 for d in demo if d.extraction_status == "failed")
     note = f" ({unreadable} .docx unread - pip install python-docx)" if unreadable else ""
     return report(
         problems,
-        f"{DEMO}: {len(demo)} files, all identified, all 5 passes exercised, "
+        f"{DEMO}: {len(demo)} files, all identified, all {len(EXTRACTION_PASSES)} passes exercised, "
         f"{len(scans)} scan read back through OCR, "
         f"{len(from_xml)} financial facts read from the e-tax XML with no LLM{note}; "
         f"{MULTI_PERIOD}: {len(multi_period)} statements across two periods; "

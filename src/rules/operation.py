@@ -4,6 +4,10 @@ O05 and O06 are not in the BRD. They compare the credit application against
 the systems, which the proposal extraction pass makes available at no extra
 cost, and both differences are operational signals worth seeing. Their titles
 say so.
+
+The functions here DECIDE; they do not declare. Which of them is a rule, under
+what id, title and severity, and on which facts, is in src/rules/registry.py -
+one catalogue for all of them, so there is one place to look.
 """
 
 from __future__ import annotations
@@ -11,15 +15,28 @@ from __future__ import annotations
 from src.facts import Facts
 from src.rules._compare import norm_text
 from src.rules.criteria import unsecured_eligible
-from src.rules.engine import Rule, Verdict, as_date, failed, passed, variance_pct
+from src.rules.engine import Verdict, as_date, failed, passed, variance_pct
 
 
-def _check_within_validity(facts: Facts, settings: dict) -> Verdict:
-    """The limit was booked while the approval was still valid."""
+def check_within_validity(facts: Facts, settings: dict) -> Verdict:
+    """The limit was booked while the approval was valid - BOTH ends of the window.
+
+    BRD row 35 asks whether the booking happened while the approval was still in
+    force, which is an interval. Booking before the batch took effect is as wrong
+    as booking after it expired, and only the late half used to be checked.
+    """
 
     booked = as_date(facts.get("t24.booking_date"))
-    valid_to = as_date(facts.get("bep.batch_valid_to"))
+    valid_from = as_date(facts.get("los.batch_valid_from"))
+    valid_to = as_date(facts.get("los.batch_valid_to"))
+    window = f"{valid_from.isoformat()} — {valid_to.isoformat()}"
 
+    if booked < valid_from:
+        early = (valid_from - booked).days
+        return failed(
+            f"HMTD hạch toán trên T24 ngày {booked.isoformat()}, trước ngày lô phê duyệt "
+            f"có hiệu lực {valid_from.isoformat()} — sớm {early} ngày"
+        )
     if booked > valid_to:
         late = (booked - valid_to).days
         return failed(
@@ -27,18 +44,17 @@ def _check_within_validity(facts: Facts, settings: dict) -> Verdict:
             f"hết hiệu lực {valid_to.isoformat()} — trễ {late} ngày"
         )
     return passed(
-        f"HMTD hạch toán ngày {booked.isoformat()}, trong hiệu lực phê duyệt đến "
-        f"{valid_to.isoformat()}"
+        f"HMTD hạch toán ngày {booked.isoformat()}, trong hiệu lực phê duyệt {window}"
     )
 
 
-def _check_limit_not_exceeded(facts: Facts, settings: dict) -> Verdict:
+def check_limit_not_exceeded(facts: Facts, settings: dict) -> Verdict:
     """Booked limits do not exceed what head office approved, per product too."""
 
     active_total = float(facts.get("t24.active_limit"))
-    approved_total = float(facts.get("bep.approved_limit"))
+    approved_total = float(facts.get("los.approved_limit"))
     active_by_product = facts.get("t24.active_limit_by_product")
-    approved_by_product = facts.get("bep.approved_limit_by_product")
+    approved_by_product = facts.get("los.approved_limit_by_product")
 
     exceeded: list[str] = []
     if active_total > approved_total:
@@ -61,7 +77,7 @@ def _check_limit_not_exceeded(facts: Facts, settings: dict) -> Verdict:
     )
 
 
-def _check_ccr_booking(facts: Facts, settings: dict) -> Verdict:
+def check_ccr_booking(facts: Facts, settings: dict) -> Verdict:
     """Was CCR booked correctly: no unsecured eligibility means CCR must be 100%."""
 
     ccr = float(facts.get("t24.ccr"))
@@ -70,7 +86,7 @@ def _check_ccr_booking(facts: Facts, settings: dict) -> Verdict:
 
     if eligible:
         return passed(
-            f"KH đáp ứng tiêu chí tín chấp của chương trình {facts.get('bep.program')}; "
+            f"KH đáp ứng tiêu chí tín chấp của chương trình {facts.get('los.program')}; "
             f"CCR hạch toán {ccr:g}% không bị ràng buộc mức {required:g}%"
         )
     if ccr != required:
@@ -84,7 +100,7 @@ def _check_ccr_booking(facts: Facts, settings: dict) -> Verdict:
     )
 
 
-def _check_collateral_structure(facts: Facts, settings: dict) -> Verdict:
+def check_collateral_structure(facts: Facts, settings: dict) -> Verdict:
     """CCR below 100% requires collateral to be a vehicle or real estate."""
 
     ccr = float(facts.get("t24.ccr"))
@@ -112,11 +128,11 @@ def _check_collateral_structure(facts: Facts, settings: dict) -> Verdict:
     )
 
 
-def _check_requested_vs_approved(facts: Facts, settings: dict) -> Verdict:
+def check_requested_vs_approved(facts: Facts, settings: dict) -> Verdict:
     """Approving more than the customer asked for is an operational signal."""
 
     requested = float(facts.get("doc.proposal.requested_limit"))
-    approved = float(facts.get("bep.approved_limit"))
+    approved = float(facts.get("los.approved_limit"))
 
     if approved > requested:
         return failed(
@@ -129,7 +145,7 @@ def _check_requested_vs_approved(facts: Facts, settings: dict) -> Verdict:
     )
 
 
-def _check_collateral_matches_dossier(facts: Facts, settings: dict) -> Verdict:
+def check_collateral_matches_dossier(facts: Facts, settings: dict) -> Verdict:
     """Collateral listed in the application matches what the systems hold."""
 
     declared = facts.get("doc.proposal.collateral_items")
@@ -170,7 +186,7 @@ def _pledged_at_cic(facts: Facts) -> list[dict]:
             if not item.get("released_on")]
 
 
-def _check_cic_security_live(facts: Facts, settings: dict) -> Verdict:
+def check_cic_security_live(facts: Facts, settings: dict) -> Verdict:
     """A facility booked as secured must have security still pledged at CIC."""
 
     ccr = float(facts.get("t24.ccr"))
@@ -197,7 +213,7 @@ def _check_cic_security_live(facts: Facts, settings: dict) -> Verdict:
     )
 
 
-def _check_cic_collateral_value(facts: Facts, settings: dict) -> Verdict:
+def check_cic_collateral_value(facts: Facts, settings: dict) -> Verdict:
     """Collateral value on the systems against what is registered at CIC."""
 
     threshold = float(settings["variance_threshold_pct"])
@@ -217,38 +233,3 @@ def _check_cic_collateral_value(facts: Facts, settings: dict) -> Verdict:
     if difference > threshold:
         return failed(f"{summary}, chênh {difference:.1f}% vượt ngưỡng {threshold:g}%")
     return passed(f"{summary}, chênh {difference:.1f}% trong ngưỡng {threshold:g}%")
-
-
-# Answers BRD rows 34, 35, 36, 37 (section 2.3, operations group);
-# O05-O08 answer no BRD row.
-RULES: tuple[Rule, ...] = (
-    Rule("O01", "HMTD được hạch toán khi phê duyệt còn hiệu lực",
-         "Ngày hạch toán trên T24 không sau ngày lô phê duyệt hết hiệu lực", "high",
-         ("t24.booking_date", "bep.batch_valid_to"), _check_within_validity),
-    Rule("O02", "Tổng giá trị HMTD không vượt quá giá trị hội sở trả ra",
-         "HMTD active trên T24, tổng và từng sản phẩm, không vượt HMTD phê duyệt trên BEP",
-         "high",
-         ("t24.active_limit", "t24.active_limit_by_product",
-          "bep.approved_limit", "bep.approved_limit_by_product"), _check_limit_not_exceeded),
-    Rule("O03", "BBC hạch toán đúng CCR",
-         "KH không đáp ứng tiêu chí tín chấp thì CCR = 100%", "high",
-         ("t24.ccr", "bep.program", "bep.gso_code",
-          "cic.customer_debt_group_at_approval", "cic.owner_debt_group_at_approval",
-          "blwl.customer_at_approval", "blwl.owner_at_approval"), _check_ccr_booking),
-    Rule("O04", "Cấu trúc TSBĐ phù hợp theo quy định",
-         "CCR dưới 100% thì mọi TSBĐ phải là PTVT hoặc BĐS", "high",
-         ("t24.ccr", "collateral.items"), _check_collateral_structure),
-    Rule("O05", "HMTD phê duyệt không vượt mức khách hàng đề nghị (ngoài BRD)",
-         "HMTD trên BEP không lớn hơn HMTD khách hàng đề nghị trong hồ sơ", "medium",
-         ("doc.proposal.requested_limit", "bep.approved_limit"), _check_requested_vs_approved),
-    Rule("O06", "TSBĐ kê trong hồ sơ khớp với TSBĐ trên hệ thống (ngoài BRD)",
-         "Cùng loại tài sản, và tổng giá trị chênh không quá 40%", "medium",
-         ("doc.proposal.collateral_items", "collateral.items"),
-         _check_collateral_matches_dossier),
-    Rule("O07", "TSBĐ đăng ký tại CIC còn hiệu lực khi CCR dưới 100% (ngoài BRD)",
-         "CCR dưới 100% thì trên CIC phải còn ít nhất một tài sản đang thế chấp", "high",
-         ("t24.ccr", "cic.collateral_items"), _check_cic_security_live),
-    Rule("O08", "Giá trị TSBĐ trên hệ thống khớp với đăng ký tại CIC (ngoài BRD)",
-         "Tổng giá trị TSBĐ trên hệ thống chênh không quá 40% so với CIC", "medium",
-         ("collateral.items", "cic.collateral_items"), _check_cic_collateral_value),
-)

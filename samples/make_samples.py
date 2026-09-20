@@ -30,6 +30,7 @@ below is written to hit exactly one document type.
 
 import shutil
 import sys
+import io
 import zipfile
 from pathlib import Path
 
@@ -126,7 +127,52 @@ SCAN_SIZE = (1654, 2339)          # A4 at 200 DPI
 SCAN_DPI = 200.0
 
 
-def write_scanned_pdf(path: Path, title: str, lines: list[str]) -> None:
+def write_signed_pdf(path: Path, title: str, lines: list[str]) -> None:
+    """A text PDF carrying a signature dictionary, as a signed filing does.
+
+    The dictionary is STRUCTURAL ONLY - a real certificate is not invented here,
+    and nothing in this project verifies one. It exists so the PDF half of
+    src/utils/reading/digital_signature.py is exercised by a sample dossier and
+    not only by bytes crafted inside a check.
+    """
+
+    text = "\n".join([SYNTHETIC_BANNER, "", title, ""] + lines)
+    content = "BT /F1 9 Tf 40 780 Td 12 TL\n" + "".join(
+        f"({line.replace(chr(92), '')[:88]}) Tj T*\n" for line in text.splitlines()
+    ) + "ET"
+    stream = content.encode("latin-1", "replace")
+
+    objects = [
+        b"<</Type/Catalog/Pages 2 0 R/AcroForm<</SigFlags 3/Fields[6 0 R]>>>>",
+        b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]"
+        b"/Resources<</Font<</F1 5 0 R>>>>/Contents 4 0 R/Annots[6 0 R]>>",
+        b"<</Length " + str(len(stream)).encode() + b">>stream\n" + stream + b"\nendstream",
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+        b"<</Type/Annot/Subtype/Widget/FT/Sig/T(Signature1)/Rect[0 0 0 0]/V 7 0 R>>",
+        b"<</Type/Sig/Filter/Adobe.PPKLite/SubFilter/adbe.pkcs7.detached"
+        b"/ByteRange[0 1000 2000 3000]/Contents<308006092a864886f70d010702>"
+        b"/M(D:20260320120000+07'00')>>",
+    ]
+
+    out = bytearray(b"%PDF-1.7\n")
+    offsets = []
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj".encode() + body + b"endobj\n"
+    start_xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += (f"trailer<</Size {len(objects) + 1}/Root 1 0 R>>\nstartxref\n"
+            f"{start_xref}\n%%EOF\n").encode()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(out))
+
+
+def write_scanned_pdf(path: Path, title: str, lines: list[str],
+                      extra_pages: list[list[str]] | None = None) -> None:
     """A page of text rendered to an image and wrapped in a PDF - a scan.
 
     The point is what it does NOT contain: no font, no text layer, nothing a
@@ -139,15 +185,21 @@ def write_scanned_pdf(path: Path, title: str, lines: list[str]) -> None:
 
     from PIL import Image, ImageDraw, ImageFont
 
-    image = Image.new("L", SCAN_SIZE, 255)
-    draw = ImageDraw.Draw(image)
     font = ImageFont.truetype(SCAN_FONT, 34)
-    y = 140
-    for line in [SYNTHETIC_BANNER, "", title, ""] + lines:
-        draw.text((120, y), line, font=font, fill=30)
-        y += 58
+
+    def render(body: list[str]) -> "Image.Image":
+        image = Image.new("L", SCAN_SIZE, 255)
+        draw = ImageDraw.Draw(image)
+        y = 140
+        for line in body:
+            draw.text((120, y), line, font=font, fill=30)
+            y += 58
+        return image
+
+    first = render([SYNTHETIC_BANNER, "", title, ""] + lines)
+    rest = [render([SYNTHETIC_BANNER, ""] + page) for page in extra_pages or []]
     path.parent.mkdir(parents=True, exist_ok=True)
-    image.save(path, "PDF", resolution=SCAN_DPI)
+    first.save(path, "PDF", resolution=SCAN_DPI, save_all=bool(rest), append_images=rest)
 
 
 def write_csv(path: Path, rows: list[list[str]]) -> None:
@@ -160,9 +212,84 @@ def write_csv(path: Path, rows: list[list[str]]) -> None:
         writer.writerows(rows)
 
 
-def write_jpeg_placeholder(path: Path) -> None:
-    """A 1x1 JPEG. No reader opens it, and that is the point: rule P03 must
-    still see the file and reject the format."""
+def write_photo_collage_pdf(path: Path, count: int = 4) -> None:
+    """One PDF page holding `count` SEPARATE embedded photographs.
+
+    This is the shape most real photo dossiers take: an RM pastes four or six
+    shots into a Word page and exports it. Rendering such a page as one image
+    would cost each photo most of its resolution and collapse four scenes into a
+    single answer, so the extraction pulls the photographs out individually - and
+    that branch needs a fixture whose page really does carry several image
+    objects, which a flattened image cannot provide.
+    """
+
+    from PIL import Image
+
+    def photo(colour: tuple[int, int, int], size: tuple[int, int] = (480, 360)) -> bytes:
+        buffer = io.BytesIO()
+        Image.new("RGB", size, colour).save(buffer, "JPEG", quality=85)
+        return buffer.getvalue()
+
+    palette = [(200, 40, 40), (40, 160, 60), (40, 80, 200), (220, 180, 40)]
+    pictures = [photo(palette[index % len(palette)]) for index in range(count)]
+    # A company logo in the header, as these pages always have. It is an embedded
+    # image too, and must NOT be read as a photograph of the business - the size
+    # floor in the extraction is what keeps it out, and this is what tests it.
+    sizes = [(480, 360)] * count + [(64, 64)]
+    pictures.append(photo((10, 10, 10), size=(64, 64)))
+
+    objects: dict[int, bytes] = {}
+    for index, data in enumerate(pictures):
+        width, height = sizes[index]
+        objects[5 + index] = (
+            f"<</Type/XObject/Subtype/Image/Width {width}/Height {height}".encode()
+            + b"/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode"
+            b"/Length " + str(len(data)).encode() + b">>stream\n" + data + b"\nendstream"
+        )
+
+    spots = [(50, 450), (310, 450), (50, 120), (310, 120)]
+    placements = [
+        f"q 240 0 0 180 {spots[i % len(spots)][0]} {spots[i % len(spots)][1]} cm "
+        f"/Im{i} Do Q".encode()
+        for i in range(count)
+    ]
+    # The logo, drawn small in the header where these pages always put it.
+    placements.append(f"q 40 0 0 40 50 760 cm /Im{count} Do Q".encode())
+    content = b"\n".join(placements)
+    objects[4] = b"<</Length " + str(len(content)).encode() + b">>stream\n" + content + b"\nendstream"
+    resources = b"/XObject<<" + b"".join(
+        f"/Im{i} {5 + i} 0 R".encode() for i in range(len(pictures))) + b">>"
+    objects[3] = (b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]/Resources<<"
+                  + resources + b">>/Contents 4 0 R>>")
+    objects[2] = b"<</Type/Pages/Kids[3 0 R]/Count 1>>"
+    objects[1] = b"<</Type/Catalog/Pages 2 0 R>>"
+
+    out = bytearray(b"%PDF-1.7\n")
+    offsets: dict[int, int] = {}
+    for number in sorted(objects):
+        offsets[number] = len(out)
+        out += f"{number} 0 obj".encode() + objects[number] + b"endobj\n"
+    start_xref = len(out)
+    out += f"xref\n0 {max(objects) + 1}\n0000000000 65535 f \n".encode()
+    for number in sorted(objects):
+        out += f"{offsets[number]:010d} 00000 n \n".encode()
+    out += (f"trailer<</Size {max(objects) + 1}/Root 1 0 R>>\nstartxref\n"
+            f"{start_xref}\n%%EOF\n").encode()
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(bytes(out))
+
+
+def write_jpeg_placeholder(path: Path, marker: bytes = b"") -> None:
+    """A 1x1 JPEG.
+
+    It carries no scene a vision model could read, and cannot: no real site-visit
+    photograph belongs in this repository. What it does exercise is everything
+    around the vision pass - the file is discovered, identified as the photo
+    document type by its name, accepted by the format rule, and routed to the
+    SITEVISIT_PHOTO pass. What the model would SEE is graded from fixtures
+    instead, in verify_persona_evidence.
+    """
 
     payload = bytes.fromhex(
         "ffd8ffe000104a46494600010100000100010000ffdb004300"
@@ -170,6 +297,13 @@ def write_jpeg_placeholder(path: Path) -> None:
         "ffc0000b080001000101011100ffc40014000100000000000000000000000000000009"
         "ffda0008010100003f00d2cf20ffd9"
     )
+    # A JPEG comment segment keeps two placeholders from being byte-identical:
+    # the pipeline de-duplicates by file hash, so identical photos would collapse
+    # into one document and the sample would silently test half of what it claims.
+    if marker:
+        comment = b"\xff\xfe" + (len(marker) + 2).to_bytes(2, "big") + marker
+        payload = payload[:2] + comment + payload[2:]
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(payload)
 
@@ -263,63 +397,11 @@ def build_case_demo(root: Path) -> None:
         ],
     )
 
-    # A scan, not a document: this is the one sample that exercises OCR.
+    # A scan, not a document: this is the one sample that exercises OCR. A site
+    # visit report is the most realistic thing in a dossier to arrive scanned, and
+    # it routes to the SITEVISIT pass.
     write_scanned_pdf(
-        root / "ho_so_noi_bo" / "thong_tin_cic_cua_khach_hang_vay.pdf",
-        "BÁO CÁO CHI TIẾT QUAN HỆ TÍN DỤNG (MẪU S10A)",
-        [
-            "Số hiệu: 2025/S10A — Ngày gửi: 20/12/2025",
-            "Đơn vị tra cứu: Ngân hàng TMCP Kỹ Thương Việt Nam",
-            "",
-            f"Tên khách hàng: {CUSTOMER}",
-            f"Mã số thuế: {TAX_CODE}",
-            f"Người đại diện: {OWNER}",
-            f"Địa chỉ: {ADDRESS}",
-            "",
-            "2.1. Dư nợ hiện tại",
-            "TCTD: TCB - CN Hà Nội | Khoản mục: Dư nợ cho vay ngắn hạn",
-            "Nhóm nợ: Nợ đủ tiêu chuẩn | VNĐ: 2,400,000,000",
-            "",
-            "2.7. Khách hàng không có nợ xấu trong 5 năm gần nhất.",
-        ],
-    )
-
-    write_docx(
-        root / "ho_so_noi_bo" / "thong_tin_cic_dai_dien_phap_luat.docx",
-        "BÁO CÁO CHI TIẾT QUAN HỆ TÍN DỤNG NGƯỜI ĐẠI DIỆN (MẪU S10A)",
-        [
-            "Số hiệu: 2025/S10A-DD — Ngày gửi: 20/12/2025",
-            "",
-            f"Tên khách hàng: {OWNER}",
-            f"Số CCCD: {OWNER_ID}",
-            "",
-            "2.1. Dư nợ hiện tại",
-            "TCTD: Ngân hàng A | Khoản mục: Tổng cộng | "
-            "Nhóm nợ: Nợ đủ tiêu chuẩn | VNĐ: 350,000,000",
-        ],
-    )
-
-    write_docx(
-        root / "ho_so_noi_bo" / "thong_tin_cic_tai_san_bao_dam.docx",
-        "THÔNG TIN ĐẢM BẢO TIỀN VAY (MẪU R20)",
-        [
-            "Số hiệu: 2025/R20 — Ngày gửi: 20/12/2025",
-            "",
-            f"Tên khách hàng: {CUSTOMER}",
-            f"Mã số thuế: {TAX_CODE}",
-            f"Người đại diện: {OWNER}",
-            f"Địa chỉ: {ADDRESS}",
-            "",
-            "Danh sách Tài sản bảo đảm:",
-            "TCTD: TCB - CN Hà Nội | Mã số tài sản: MD01234BDS | "
-            "Loại tài sản: 01 | Mô tả tài sản: Nhà xưởng tại Hà Nội | "
-            f"Chủ sở hữu: {CUSTOMER} | Giá trị TS (Triệu VNĐ): 8,000 | "
-            "Ngày thế chấp: 10/01/2025 | Ngày giải chấp:",
-        ],
-    )
-
-    write_docx(
-        root / "ho_so_soan_thao_noi_bo" / "bao_cao_khao_sat_thuc_dia.docx",
+        root / "ho_so_soan_thao_noi_bo" / "bao_cao_khao_sat_thuc_dia.pdf",
         "BÁO CÁO KHẢO SÁT THỰC ĐỊA",
         [
             f"Khách hàng: {CUSTOMER} — MST {TAX_CODE}",
@@ -342,6 +424,27 @@ def build_case_demo(root: Path) -> None:
             "",
             "Đã ký và đóng dấu.",
         ],
+    )
+
+    # Site-visit photographs: LOS says this customer needs a field visit, so the
+    # checklist requires them and V10 reads what they show. Two shapes on purpose
+    # - loose JPEGs, and the single multi-page PDF most dossiers actually use.
+    for index in (1, 2):
+        write_jpeg_placeholder(
+            root / "ho_so_soan_thao_noi_bo" / f"anh_khao_sat_thuc_dia_{index}.jpg",
+            marker=f"anh khao sat {index}".encode(),
+        )
+    write_scanned_pdf(
+        root / "ho_so_soan_thao_noi_bo" / "anh_khao_sat_thuc_dia_tong_hop.pdf",
+        "ANH KHAO SAT THUC DIA - TRANG 1",
+        [f"Khach hang: {CUSTOMER}", "Toan canh nha xuong."],
+        extra_pages=[
+            ["TRANG 2", "", "Khu vuc may moc va day chuyen."],
+            ["TRANG 3", "", "Kho hang va cong nhan dang lam viec."],
+        ],
+    )
+    write_photo_collage_pdf(
+        root / "ho_so_soan_thao_noi_bo" / "anh_khao_sat_thuc_dia_ghep_trang.pdf"
     )
 
     write_docx(
@@ -401,6 +504,18 @@ def build_case_nhieu_ky_bctc(root: Path) -> None:
         ],
     )
 
+    # A signed PDF filing, so the PDF branch of the signature detector is
+    # exercised by a real file. P05 reads it whether or not an LLM ever parses it.
+    write_signed_pdf(
+        box / "bao_cao_tai_chinh_2023_da_ky_so.pdf",
+        "BÁO CÁO TÀI CHÍNH 2023 (BAN CO CHU KY SO)",
+        [
+            f"Ma so thue: {TAX_CODE}",
+            "TONG CONG TAI SAN: 47704469267",
+            "TONG CONG NGUON VON: 47704469267",
+        ],
+    )
+
     # 2024: the same period twice - once as an e-tax filing, once as a scan
     # carrying different numbers. The filing must win.
     _xml_for_year(SOURCE_BCTC_XML, box / "bao_cao_tai_chinh_2024.xml", 2024)
@@ -451,22 +566,8 @@ def build_case_thieu_ho_so(root: Path) -> None:
         root / "ho_so_vay_von" / "giay_de_nghi_cap_tin_dung_scan.jpg"
     )
 
-    write_docx(
-        root / "ho_so_noi_bo" / "thong_tin_cic_cua_khach_hang_vay.docx",
-        "BÁO CÁO CHI TIẾT QUAN HỆ TÍN DỤNG (MẪU S10A)",
-        [
-            "Số hiệu: 2025/S10A — Ngày gửi: 20/12/2025",
-            f"Tên khách hàng: {CUSTOMER}",
-            f"Mã số thuế: {TAX_CODE}",
-            "Người đại diện: Trần Thị B",
-            "",
-            "2.1. Dư nợ hiện tại",
-            "TCTD: Ngân hàng B | Khoản mục: Tổng cộng | "
-            "Nhóm nợ: Nợ dưới tiêu chuẩn | VNĐ: 5,100,000,000",
-        ],
-    )
     # Missing on purpose: bang_can_doi_ke_toan, bao_cao_ket_qua_kinh_doanh,
-    # to_khai_thue_gtgt, cic_dai_dien_phap_luat_co_dong, bao_cao_khao_sat_thuc_dia.
+    # to_khai_thue_gtgt, bao_cao_khao_sat_thuc_dia.
 
 
 # ---------------------------------------------------------------------------

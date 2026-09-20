@@ -27,7 +27,8 @@ defaults:
   secured_collateral_types: ["PTVT", "BDS"]
 
   # BRD 2.3.a: "Word/excel/pdf/xml"
-  allowed_extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".xml"]
+  allowed_extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".xml",
+                     ".jpg", ".jpeg", ".png"]
 
   # BRD 2.3.a: total assets must equal total capital. Zero tolerance - a
   # balance sheet out by one dong is a balance sheet that does not balance.
@@ -36,8 +37,9 @@ defaults:
   # BRD 2.4: from this group upwards counts as "nợ cần chú ý, nợ có vấn đề"
   debt_group_warning_threshold: 2
 
-  # BRD 2.4: "Số lần phát sinh PDLD". TODO - business to confirm the minimum.
-  min_pdld_count: 3
+  # BRD 2.4: "Số lần phát sinh PDLD" - PDLD is Payment due LD, an overdue
+  # disbursement, so this is a CEILING and 0 means zero tolerance.
+  max_pdld_count: 0
 
   # Expanded before addresses are compared (V03, F01)
   address_abbreviations:
@@ -61,55 +63,103 @@ debt_group_by_label:
   "no nghi ngo": 4
   "no co kha nang mat von": 5
 
-# BRD 2.3.b: a non-core industry forces CCR to 100%.
+# V10: what each persona's site-visit photos should show, and how many of those
+# markers must appear across the WHOLE photo set. The union of every `expected`
+# list is the closed vocabulary the vision prompt is given - deliberately the
+# whole union and not the customer's own list, so the model is never told which
+# persona it is being asked to confirm.
+# TODO - business to confirm the personas, their markers and each threshold.
+persona_evidence:
+  "san xuat":
+    min_markers: 2
+    expected: ["nha xuong", "nha kho", "cong nhan", "may moc", "day chuyen san xuat"]
+  "thuong mai":
+    min_markers: 1
+    expected: ["cua hang", "hang hoa tren ke", "kho hang", "quay giao dich"]
+  "dich vu":
+    min_markers: 1
+    expected: ["van phong", "quay le tan", "nhan vien lam viec", "bien hieu"]
+  "ban buon":
+    min_markers: 1
+    expected: ["kho hang", "hang hoa dong kien", "xe tai", "khu boc xep"]
+
+# V09: what kind of financial report this is. Both sides print their own wording
+# - the RM types one thing into LOS, the document says another - so each is
+# normalised (lowercase, no diacritics) and looked up here. A wording absent from
+# this table leaves the fact MISSING; it is never guessed into a kind.
+# TODO - business to confirm the full vocabulary and its wordings.
+financial_report_types:
+  "bao cao thue": "Báo cáo thuế"
+  "bctc thue": "Báo cáo thuế"
+  "bo bao cao tai chinh (b01a - dnn)(tt133/2016/tt-btc)": "Báo cáo thuế"
+  "bao cao kiem toan": "Báo cáo kiểm toán"
+  "bctc kiem toan": "Báo cáo kiểm toán"
+  "bctc rieng le": "BCTC riêng lẻ"
+  "bctc hop nhat": "BCTC hợp nhất"
+
+# BRD 2.3.b: the industries the bank is focusing on. An industry NOT listed here
+# is off-focus, and an off-focus industry forces CCR to 100%.
 # TODO - business to supply the full list of GSO codes.
-non_core_industries:
+focus_GSO:
   - "4711"
   - "6810"
+  -
+
+# BRD 2.3.b: the industries credit is RESTRICTED for. Different consequence from
+# focus_GSO: being outside focus_GSO means CCR must be 100%, while being inside
+# this list means the facility should not have been granted at all - so C02 fails
+# regardless of CCR. An empty list is valid and means nothing is restricted yet.
+# TODO - business to supply the full list of GSO codes.
+restricted_GSO: []
 
 programs:
 
   - id: B1CP
     label: "B1CP"
     checklist:
-      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory,   requires_signature: true}
+      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory,   requires_signature: false}
+      - {type_id: giay_phep_du_dieu_kien,         requirement: recommended, requires_signature: false}
       - {type_id: bang_can_doi_ke_toan,           requirement: mandatory,   requires_signature: true}
       - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory,   requires_signature: true}
-      - {type_id: to_khai_thue_gtgt,              requirement: mandatory,   requires_signature: false}
-      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory,   requires_signature: true}
-      - {type_id: cic_khach_hang_vay,             requirement: mandatory,   requires_signature: false}
-      - {type_id: cic_dai_dien_phap_luat_co_dong, requirement: mandatory,   requires_signature: false}
-      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory,   requires_signature: true}
+      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory,   requires_signature: false}
+      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory,   requires_signature: false}
+      - {type_id: anh_khao_sat_thuc_dia,           requirement: mandatory,   requires_signature: false, when: site_visit}
       - {type_id: ho_so_tsbd,                     requirement: recommended, requires_signature: false}
     criteria:
-      max_cic_group_unsecured: 1
-      blwl_blocks_unsecured: true
+      max_cic_group: 1
+      BO_max_cic_group: 1
 
   - id: MISA
     label: "MISA"
     checklist:
-      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory, requires_signature: true}
-      - {type_id: bang_can_doi_ke_toan,           requirement: mandatory, requires_signature: true}
-      - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory, requires_signature: true}
-      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory, requires_signature: true}
-      - {type_id: cic_khach_hang_vay,             requirement: mandatory, requires_signature: false}
-      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory, requires_signature: true}
+      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory,   requires_signature: false}
+      - {type_id: giay_phep_du_dieu_kien,         requirement: recommended, requires_signature: false}
+      - {type_id: bang_can_doi_ke_toan,           requirement: mandatory,   requires_signature: true}
+      - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory,   requires_signature: true}
+      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory,   requires_signature: false}
+      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory,   requires_signature: false}
+      - {type_id: anh_khao_sat_thuc_dia,           requirement: mandatory,   requires_signature: false, when: site_visit}
+      - {type_id: ho_so_tsbd,                     requirement: recommended, requires_signature: false}
     criteria:
-      max_cic_group_unsecured: 1
-      blwl_blocks_unsecured: true
+      max_cic_group: 1
+      BO_max_cic_group: 1
 
   - id: PLPP
     label: "PL++"
     checklist:
-      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory, requires_signature: true}
+      - {type_id: giay_dang_ky_kinh_doanh,        requirement: mandatory, requires_signature: false}
+      - {type_id: giay_phep_du_dieu_kien,         requirement: recommended, requires_signature: false}
+      - {type_id: pccc_bao_hiem_chay_no,          requirement: recommended, requires_signature: false}
+      - {type_id: so_huu_thue_nha_xuong,          requirement: recommended, requires_signature: false}
       - {type_id: bang_can_doi_ke_toan,           requirement: mandatory, requires_signature: true}
       - {type_id: bao_cao_ket_qua_kinh_doanh,     requirement: mandatory, requires_signature: true}
-      - {type_id: to_khai_thue_gtgt,              requirement: mandatory, requires_signature: false}
-      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory, requires_signature: true}
-      - {type_id: hop_dong_dau_ra_dau_vao,        requirement: mandatory, requires_signature: true}
-      - {type_id: cic_khach_hang_vay,             requirement: mandatory, requires_signature: false}
-      - {type_id: cic_dai_dien_phap_luat_co_dong, requirement: mandatory, requires_signature: false}
-      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory, requires_signature: true}
+      - {type_id: to_khai_thue_gtgt,              requirement: mandatory, requires_signature: true}
+      - {type_id: sao_ke_tai_khoan_tctd,          requirement: recommended, requires_signature: false}
+      - {type_id: bang_ke_xuat_nhap_ton_cong_no,  requirement: recommended, requires_signature: false}
+      - {type_id: de_nghi_cap_tin_dung,           requirement: mandatory, requires_signature: false}
+      - {type_id: bao_cao_khao_sat_thuc_dia,      requirement: mandatory, requires_signature: false}
+      - {type_id: anh_khao_sat_thuc_dia,           requirement: mandatory,   requires_signature: false, when: site_visit}
+      - {type_id: ho_so_tsbd,                     requirement: recommended, requires_signature: false}
     criteria:
-      max_cic_group_unsecured: 0
-      blwl_blocks_unsecured: true
+      max_cic_group: 1
+      BO_max_cic_group: 1

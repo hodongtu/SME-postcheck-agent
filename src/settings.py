@@ -29,14 +29,17 @@ REQUIRED_DEFAULTS = (
     "allowed_extensions",
     "balance_tolerance_vnd",
     "debt_group_warning_threshold",
-    "min_pdld_count",
+    "max_pdld_count",
     "address_abbreviations",
 )
 VALID_REQUIREMENTS = frozenset({"mandatory", "recommended", "optional"})
+# A checklist item may be required only under a condition. The only one so far
+# is "site_visit": required when LOS says this file needs a field visit.
+VALID_CONDITIONS = frozenset({"site_visit"})
 
 # Every program must declare these, so that a configuration gap fails on load
 # rather than surfacing in the report as a failed criterion for the customer.
-REQUIRED_CRITERIA = ("max_cic_group_unsecured", "blwl_blocks_unsecured")
+REQUIRED_CRITERIA = ("max_cic_group", "BO_max_cic_group")
 
 
 class SettingsError(RuntimeError):
@@ -79,6 +82,11 @@ def load_settings(path: Path | str | None = None) -> dict[str, Any]:
                     f"program '{program_id}' references type_id '{type_id}', which is "
                     f"not in document_matrix.yaml"
                 )
+            if item.get("when") is not None and item["when"] not in VALID_CONDITIONS:
+                _fail(
+                    f"program '{program_id}', type '{type_id}': when "
+                    f"'{item['when']}' must be one of {sorted(VALID_CONDITIONS)}"
+                )
             if item.get("requirement") not in VALID_REQUIREMENTS:
                 _fail(
                     f"program '{program_id}', type '{type_id}': requirement "
@@ -104,8 +112,34 @@ def load_settings(path: Path | str | None = None) -> dict[str, Any]:
 
     settings = dict(defaults)
     settings["programs"] = programs
-    settings["non_core_industries"] = raw.get("non_core_industries") or []
+    # A blank list entry is an editing artefact, not a code; drop it rather than
+    # let None reach the comparison as an industry nobody has. An empty list is a
+    # legitimate state for both keys - it says "nothing classified yet", which is
+    # different from a missing key, and that is why neither is required above.
+    for key in ("focus_GSO", "restricted_GSO"):
+        settings[key] = [
+            str(code).strip() for code in (raw.get(key) or []) if str(code or "").strip()
+        ]
     settings["debt_group_by_label"] = raw.get("debt_group_by_label") or {}
+    settings["financial_report_types"] = raw.get("financial_report_types") or {}
+
+    # A persona whose threshold exceeds the markers it declares can never be
+    # satisfied, and V10 would fail every customer of that persona while the
+    # report looked entirely normal. Caught on load, not on the run.
+    personas = raw.get("persona_evidence") or {}
+    for name, entry in personas.items():
+        expected = (entry or {}).get("expected") or []
+        minimum = (entry or {}).get("min_markers")
+        if not expected:
+            _fail(f"persona_evidence['{name}'] declares no expected markers")
+        if not isinstance(minimum, int) or minimum < 1:
+            _fail(f"persona_evidence['{name}'].min_markers must be an integer >= 1")
+        if minimum > len(expected):
+            _fail(
+                f"persona_evidence['{name}'] needs {minimum} markers but declares "
+                f"only {len(expected)} - the threshold can never be met"
+            )
+    settings["persona_evidence"] = personas
     settings["version"] = raw.get("version")
     return settings
 

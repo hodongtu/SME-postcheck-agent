@@ -15,7 +15,18 @@ Vietnamese.
 
 from __future__ import annotations
 
-from src.facts import FACT_KEYS, Facts
+from src.facts import (
+    CIC,
+    DOCUMENTS,
+    FACT_KEYS,
+    LISTS,
+    LOS,
+    PORTFOLIO,
+    T24,
+    VIRAC,
+    Facts,
+    db_facts,
+)
 from src.report.templates import Template, get_template
 from src.rules.engine import Finding, summarise
 
@@ -32,24 +43,33 @@ EMPTY_COMMENTARY = "_Chưa có nhận định cho mục này._"
 # between data and prose, not a matter of layout.
 COLLECTION_ROWS: dict[str, tuple[tuple[str, str, tuple[str, ...]], ...]] = {
     "1.1": (
-        ("Thông tin khách hàng và HMTD được PD trên hệ thống BEP", "BEP", ("bep.",)),
-        ("Thông tin/ hồ sơ KH cung cấp", "Tài liệu upload",
+        ("Thông tin khách hàng và HMTD được PD trên hệ thống LOS", LOS,
+         ("los.customer_name", "los.tax_code", "los.address", "los.owner_",
+          "los.gso_code", "los.industry", "los.program", "los.approved_limit",
+          "los.batch_", "los.sto_revenue", "los.chief_accountant_name")),
+        ("Thông tin top 5 cổ đông góp vốn", LOS, ("los.shareholders",)),
+        ("Báo cáo thực địa online do RM nhập", DOCUMENTS, ("los.sitevisit_online.",)),
+        ("Báo cáo tài chính online do RM nhập", DOCUMENTS, ("los.financials_online.",)),
+        ("Thông tin/ hồ sơ KH cung cấp", DOCUMENTS,
          ("doc.financials.", "doc.proposal.", "doc.customer_name_values",
           "doc.tax_code_values", "doc.address_values", "doc.owner_name_values",
           "doc.owner_id_number_values", "doc.owner_birth_year_values",
-          "doc.document_date_values", "doc.document_number_values",
           "doc.signature_and_seal", "doc.types_present", "doc.extensions",
           "doc.industry_on_registration")),
-        ("Thông tin/ hồ sơ ĐVKD đánh giá", "Tài liệu upload",
+        ("Thông tin/ hồ sơ ĐVKD đánh giá", DOCUMENTS,
          ("doc.industry_on_sitevisit",)),
     ),
     "1.2": (
-        ("CIC KH/Chủ doanh nghiệp", "Database & Tài liệu upload", ("cic.",)),
-        ("BL/WL của Khách hàng/Chủ doanh nghiệp", "Database & Tài liệu upload", ("blwl.",)),
-        ("Limit và dư nghĩa vụ tại TCB", "Database", ()),
-        ("Tài sản đảm bảo", "Database", ("collateral.",)),
-        ("Thông tin bên thứ ba (Virac) và giao dịch dòng tiền", "Database & Virac",
-         ("virac.", "cashflow.")),
+        ("CIC KH/Chủ doanh nghiệp", CIC, ("cic.",)),
+        ("BL/WL của Khách hàng/Chủ doanh nghiệp", LISTS, ("blwl.",)),
+        ("Luồng thu hồi nợ AMC (ngoài BRD)", LISTS, ("amc.",)),
+        ("Limit và dư nghĩa vụ tại TCB", T24,
+         ("t24.active_limit", "t24.outstanding")),
+        ("Tài sản đảm bảo", T24, ("collateral.",)),
+        ("Danh mục tín dụng tại TCB (ngoài BRD)", PORTFOLIO, ("portfolio.",)),
+        ("Giao dịch tài khoản theo kỳ", T24, ("t24.transactions_by_period",)),
+        ("Giao dịch dòng tiền: LD quá hạn (PDLD)", T24, ("cashflow.",)),
+        ("Thông tin bên thứ ba (Virac)", VIRAC, ("virac.",)),
     ),
 }
 
@@ -76,7 +96,28 @@ def _criteria_table(findings: list[Finding]) -> str:
     return header + rows
 
 
-def _summary(findings: list[Finding]) -> str:
+def _no_approval_record(facts: Facts | None) -> bool:
+    """Did LOS hold no approval at all for this customer.
+
+    Distinguishes a wrong lookup key from an incomplete dossier. They look
+    identical in the report otherwise - both fill it with missing-data rows - and
+    the sentence below then blames the dossier for a tax code that is simply not
+    in the database. A reviewer acting on that would go back to the business unit
+    and ask for documents that are already there.
+
+    LOS specifically, not "no system fact at all": CASHFLOW_PDLD_SQL is a
+    COUNT(*), which returns a row for a customer nobody has ever heard of, so one
+    fact always arrives and a broader test would never fire. LOS is the approval
+    record itself - no row there means this review has no subject.
+    """
+
+    if facts is None:
+        return False
+    approval = [path for path in db_facts() if path.startswith("los.")]
+    return bool(approval) and not any(facts.has(path) for path in approval)
+
+
+def _summary(findings: list[Finding], facts: Facts | None = None) -> str:
     counts = summarise(findings)
     lines = [
         f"Đạt **{counts['PASS']}** · Không đạt **{counts['FAIL']}** · "
@@ -89,7 +130,14 @@ def _summary(findings: list[Finding]) -> str:
         lines += ["", f"**{len(severe)} tiêu chí không đạt ở mức độ cao:**", ""]
         lines += [f"- **{f.rule_id}** {f.title} — {_cell(f.observed)}" for f in severe]
 
-    if counts["INSUFFICIENT_DATA"]:
+    if _no_approval_record(facts):
+        lines += ["", (
+            "> **Không tìm thấy hồ sơ phê duyệt trên LOS cho mã số thuế này.** "
+            "Không phải hồ sơ thiếu chứng từ: mã số thuế có thể không có trong hệ "
+            "thống, hoặc kết nối cơ sở dữ liệu chưa được cấu hình. Kiểm tra lại mã số "
+            "thuế và `query_executor` trước khi đọc các kết luận bên dưới."
+        )]
+    elif counts["INSUFFICIENT_DATA"]:
         lines += ["", (
             f"> {counts['INSUFFICIENT_DATA']} tiêu chí chưa kiểm được vì thiếu dữ liệu. "
             f"Hồ sơ chưa rà soát xong; xem phụ lục cuối báo cáo."
@@ -135,8 +183,10 @@ def _appendix(findings: list[Finding]) -> str:
 
     lines = ["| Dữ liệu | Nguồn | Chặn tiêu chí |", "|---|---|---|"]
     for path in sorted(blocked):
-        source, description = FACT_KEYS.get(path, ("—", path))
-        lines.append(f"| {_cell(description)} | {source} | {', '.join(blocked[path])} |")
+        spec = FACT_KEYS.get(path)
+        category = spec.category if spec else "—"
+        description = spec.description if spec else path
+        lines.append(f"| {_cell(description)} | {category} | {', '.join(blocked[path])} |")
     return "\n".join(lines)
 
 
@@ -160,7 +210,7 @@ def build_values(
         "MaSoThue": meta.get("tax_code", "—"),
         "ChuongTrinh": meta.get("program", "—"),
         "NgayRaSoat": meta.get("postcheck_date", "—"),
-        "TongHop": _summary(findings),
+        "TongHop": _summary(findings, facts),
         "PhuLucThieuDuLieu": _appendix(findings),
     }
 

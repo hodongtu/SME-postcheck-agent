@@ -93,11 +93,12 @@ figures wrong.
 Return EXACTLY this JSON schema and no other text:
 {{
   "customer": {{
-    "ten": "tên doanh nghiệp như in trên tài liệu, hoặc ''",
-    "ma_so_thue": "mã số thuế: ĐÚNG 10 chữ số, hoặc 13 với ba chữ số chi nhánh. Chép
-      nguyên chữ số, bỏ dấu cách và gạch nối. Không thấy in trên tài liệu thì '' —
-      KHÔNG suy ra từ mã nào khác, con số này dùng để tra cứu dữ liệu tín dụng và
-      một chữ số sai sẽ kéo về hồ sơ của doanh nghiệp khác"
+    "name": "the company name exactly as printed on the document, or ''",
+    "tax_code": "tax code: EXACTLY 10 digits, or 13 with a three-digit branch
+      suffix. Copy the digits as printed, dropping spaces and hyphens. Not
+      printed on the document means '' - do NOT derive it from any other
+      number. This code looks the customer up in the credit systems, and one
+      wrong digit pulls back a different company's file"
   }},
   "document_type": "BCTC hợp nhất | BCTC riêng lẻ | không xác định",
   "reporting_period": {{
@@ -456,7 +457,7 @@ def conform_financial_statement(result: dict[str, Any], source: str) -> dict[str
     """
 
     result = drop_heading_rows(normalize_amounts(normalize_extraction_periods(result)))
-    result.setdefault("customer", {"ten": "", "ma_so_thue": ""})
+    result.setdefault("customer", {"name": "", "tax_code": ""})
     result.setdefault("extraction_notes", [])
     for key in _STATEMENT_KEYS:
         if not isinstance(result.get(key), dict):

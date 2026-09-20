@@ -31,7 +31,8 @@ def main() -> int:
     facts = Facts()
     facts.set("case.postcheck_date", "2025-09-14")
     assemble_document_facts(facts, [], get_settings())
-    fetch_reference_data(facts, "0101234567", Config(), "2025-01-02", "2025-09-14")
+    fetch_reference_data(facts, "0101234567", Config(), "2025-01-02", "2025-09-14",
+                         get_settings())
 
     touched = set(facts.collected()) | set(facts.to_dict()["reasons"])
     untouched = set(FACT_KEYS) - touched

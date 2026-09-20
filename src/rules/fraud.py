@@ -1,18 +1,26 @@
-"""BRD 2.2 - Identify signs of suspected fraud."""
+"""BRD 2.2 - Identify signs of suspected fraud.
+
+BRD row 20 - checking a document's authenticity against the fraud-risk team's
+guidance - is deliberately NOT implemented: that guidance was never supplied, and
+the business has confirmed the row is out of scope. Only row 19, the
+internal-consistency check, is graded here.
+
+The functions here DECIDE; they do not declare. Which of them is a rule, under
+what id, title and severity, and on which facts, is in src/rules/registry.py -
+one catalogue for all of them, so there is one place to look.
+"""
 
 from __future__ import annotations
 
-from collections import Counter
-
 from src.facts import Facts
 from src.rules._compare import distinct, make_address_normalizer, norm_digits, norm_text, rows
-from src.rules.engine import Rule, Verdict, as_date, failed, passed
+from src.rules.engine import Verdict, failed, passed
 
 
-def _check_internal_consistency(facts: Facts, settings: dict) -> Verdict:
+def check_internal_consistency(facts: Facts, settings: dict) -> Verdict:
     """The same field must read the same on every document in the dossier.
 
-    Distinct from V01-V06, which compare against BEP: a dossier can match BEP
+    Distinct from V01-V06, which compare against LOS: a dossier can match LOS
     on one document and contradict itself on another.
     """
 
@@ -25,10 +33,14 @@ def _check_internal_consistency(facts: Facts, settings: dict) -> Verdict:
     ]
 
     conflicts: list[str] = []
+    unread: list[str] = []
     checked = 0
     for label, path, normalizer in fields:
-        pairs = rows(facts.get(path))
+        # Not in this rule's `needs`: a field no document carries is compared over
+        # the documents that do carry it, and named in the verdict when none do.
+        pairs = rows(facts.get(path)) if facts.has(path) else []
         if not pairs:
+            unread.append(label)
             continue
         checked += 1
         groups = distinct(pairs, normalizer)
@@ -39,70 +51,17 @@ def _check_internal_consistency(facts: Facts, settings: dict) -> Verdict:
             )
             conflicts.append(f"{label}: {detail}")
 
+    missing_note = (
+        f"; không chứng từ nào đọc được: {', '.join(unread)}" if unread else ""
+    )
     if not checked:
         return failed("Không chứng từ nào đọc được thông tin định danh để đối chiếu chéo")
     if conflicts:
         return failed(
             f"Bất nhất ở {len(conflicts)}/{checked} trường được đối chiếu — "
-            + "; ".join(conflicts)
+            + "; ".join(conflicts) + missing_note
         )
-    return passed(f"{checked}/{checked} trường định danh nhất quán xuyên suốt các chứng từ")
-
-
-def _check_authenticity(facts: Facts, settings: dict) -> Verdict:
-    """The machine-checkable part of the fraud team's guidance.
-
-    Two signals a machine can assert on its own: a document dated after the
-    approval, and one document number reused across files. The rest - signs of
-    alteration, an odd typeface, a copied seal - is expert judgement and is
-    raised in the commentary section rather than concluded here.
-    """
-
-    approval_date = as_date(facts.get("bep.batch_valid_from"))
-    signals: list[str] = []
-
-    dated_after: list[str] = []
-    for filename, value in rows(facts.get("doc.document_date_values")):
-        try:
-            document_date = as_date(value)
-        except ValueError:
-            continue
-        if document_date > approval_date:
-            dated_after.append(f"{filename} ({document_date.isoformat()})")
-    if dated_after:
-        signals.append(
-            f"{len(dated_after)} chứng từ đề ngày sau ngày phê duyệt "
-            f"{approval_date.isoformat()}: " + ", ".join(dated_after)
-        )
-
-    numbers = rows(facts.get("doc.document_number_values"))
-    counts = Counter(norm_text(value) for _, value in numbers)
-    reused = [value for value, seen in counts.items() if value and seen > 1]
-    if reused:
-        detail = "; ".join(
-            f"“{value}”: "
-            + ", ".join(name for name, raw in numbers if norm_text(raw) == value)
-            for value in reused
-        )
-        signals.append(f"{len(reused)} số hiệu bị dùng lại ở nhiều chứng từ — {detail}")
-
-    if signals:
-        return failed("; ".join(signals))
     return passed(
-        f"Không thấy dấu hiệu máy kiểm được trên {len(numbers)} chứng từ: không chứng "
-        f"từ nào đề ngày sau ngày phê duyệt, không số hiệu nào bị trùng"
+        f"{checked}/{checked} trường định danh nhất quán xuyên suốt các chứng từ"
+        + missing_note
     )
-
-
-# Answers BRD rows 18 and 19 (section 2.2).
-RULES: tuple[Rule, ...] = (
-    Rule("F01", "Thông tin khách hàng nhất quán xuyên suốt các chứng từ",
-         "MST, tên KH, địa chỉ và tên CDN chỉ có một giá trị trên toàn hồ sơ", "high",
-         ("doc.tax_code_values", "doc.customer_name_values",
-          "doc.address_values", "doc.owner_name_values"), _check_internal_consistency),
-    Rule("F02", "Tính xác thực của chứng từ theo hướng dẫn QTRR gian lận",
-         "Không chứng từ nào đề ngày sau ngày phê duyệt; không số hiệu nào bị dùng lại",
-         "high",
-         ("doc.document_date_values", "doc.document_number_values",
-          "bep.batch_valid_from"), _check_authenticity),
-)

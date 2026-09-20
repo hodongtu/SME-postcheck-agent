@@ -19,29 +19,32 @@ from src.agents.documents.document_classification import (
     rule_classify_document,
 )
 from src.agents.documents.document_discovery import compute_file_hash, group_from_path
-from src.agents.documents.document_matrix import get_type
+from src.agents.documents.document_matrix import (
+    get_type,
+    is_financial_statement_type,
+    is_sitevisit_photo_type,
+)
 from src.agents.extraction.financial_statement_extraction import PERIOD_LABEL_PREFIX
 from src.agents.extraction.structured_extraction import (
     resolve_money_multiplier,
     scale_amount,
 )
 from src.passes import run_extraction_passes
-from src.facts import FACT_KEYS, MISSING, Facts
+from src.facts import FACT_KEYS, MISSING, Facts, db_facts
 from src.report.commentary import build_commentary
 from src.report.render import render_report
 from src.rules.engine import Finding, run_rules, summarise
 from src.rules.registry import RULES
 from src.settings import get_settings
-from src.tools import bcde, bep, t24, virac
+from src.tools import amc, los, blwl, cic, portfolio, t24, virac
 from src.types import PostcheckDocument, to_dict_list
+from src.rules._compare import norm_digits
 from src.utils.common import SUPPORTED_EXTENSIONS, normalize_text
+from src.utils.reading.digital_signature import has_digital_signature
 from src.utils.reading.extractors import extract_document_text
 
 
 NO_EXECUTOR = "chưa cấu hình query_executor nên không truy vấn được hệ thống"
-
-CUSTOMER_CIC_TYPE = "cic_khach_hang_vay"
-OWNER_CIC_TYPE = "cic_dai_dien_phap_luat_co_dong"
 
 
 class MultipleCasesError(RuntimeError):
@@ -223,26 +226,19 @@ def _more_specific_name_match(document: PostcheckDocument, verdict: dict) -> boo
 # filled by a query and by nothing else, so the list of such facts is read off
 # the catalogue rather than copied beside it: a hand-kept copy that drifts is a
 # fact quietly NOT marked missing when no executor is configured.
-DB_SOURCES = frozenset({"BEP", "T24", "BCDE", "Virac"})
-
-
-def _db_facts() -> tuple[str, ...]:
-    """Every fact a system query fills, read off the source column of FACT_KEYS."""
-
-    return tuple(
-        path for path, (source, _) in FACT_KEYS.items() if source in DB_SOURCES
-    )
-
-_BEP_FIELDS: tuple[tuple[str, str], ...] = (
-    ("bep.customer_name", "ten_kh"), ("bep.tax_code", "mst"), ("bep.address", "dia_chi"),
-    ("bep.owner_name", "ten_cdn"), ("bep.owner_id_number", "cccd_cdn"),
-    ("bep.owner_birth_year", "nam_sinh_cdn"), ("bep.gso_code", "ma_gso"),
-    ("bep.industry", "nganh_nghe"), ("bep.program", "chuong_trinh"),
-    ("bep.approved_limit", "hmtd_phe_duyet"),
-    ("bep.approved_limit_by_product", "hmtd_phe_duyet_theo_sp"),
-    ("bep.batch_valid_from", "batch_hieu_luc_tu"),
-    ("bep.batch_valid_to", "batch_het_hieu_luc"),
-    ("bep.sto_revenue", "dt_sto"),
+_LOS_FIELDS: tuple[tuple[str, str], ...] = (
+    ("los.customer_name", "ten_kh"), ("los.tax_code", "mst"), ("los.address", "dia_chi"),
+    ("los.owner_name", "ten_cdn"), ("los.owner_id_number", "cccd_cdn"),
+    ("los.owner_birth_year", "nam_sinh_cdn"), ("los.gso_code", "ma_gso"),
+    ("los.industry", "nganh_nghe"), ("los.persona", "chan_dung"),
+    ("los.is_site_visit", "co_khao_sat_thuc_dia"),
+    ("los.program", "chuong_trinh"),
+    ("los.approved_limit", "hmtd_phe_duyet"),
+    ("los.approved_limit_by_product", "hmtd_phe_duyet_theo_sp"),
+    ("los.batch_valid_from", "batch_hieu_luc_tu"),
+    ("los.batch_valid_to", "batch_het_hieu_luc"),
+    ("los.sto_revenue", "dt_sto"),
+    ("los.chief_accountant_name", "ten_ke_toan_truong"),
 )
 
 
@@ -275,27 +271,111 @@ def _query(facts: Facts, paths: tuple[str, ...], label: str, call, unpack) -> No
             facts.set(path, value, reason=f"{label} trả về giá trị rỗng")
 
 
+def _match_list(facts: Facts, entries: list[dict], prefix: str, moment: str) -> dict[str, Any]:
+    """Match the company, its owner and its shareholders against one list.
+
+    Shared by BL/WL and AMC: the two are different lists with the same shape, and
+    a subject is in one if a tax code, a national ID, or - only when the entry
+    carries neither - a name matches. Name matching is the weakest of the three
+    and is the last resort precisely because a namesake is a false positive a
+    person has to overrule.
+
+    `False` is a real answer: the list was read and this subject is not in it -
+    including when the list came back empty, which the business has decided means
+    nobody is listed rather than a lookup that did not run.
+
+    `None` is returned for a subject LOS gave us nothing to match on - with no
+    identifier at all, "not in the list" would be a conclusion drawn from nothing,
+    and `_query` turns the None into a marked-missing fact instead.
+
+    The shareholder result is a dict keyed by name rather than a list of hits: an
+    empty list would be indistinguishable from "no shareholder is listed", which
+    is the ordinary case and a real answer, while an empty dict correctly means
+    LOS recorded no shareholders.
+    """
+
+    def field(path: str) -> str:
+        return str(facts.get(path)) if facts.has(path) else ""
+
+    def hit(subject_tax_code: str, subject_id: str, subject_name: str) -> bool:
+        for entry in entries:
+            entry_tax = norm_digits(entry.get("tax_code"))
+            entry_id = norm_digits(entry.get("id_number"))
+            entry_name = normalize_text(str(entry.get("name") or ""))
+            if subject_tax_code and entry_tax and subject_tax_code == entry_tax:
+                return True
+            if subject_id and entry_id and subject_id == entry_id:
+                return True
+            if subject_name and entry_name and not entry_tax and not entry_id \
+                    and subject_name == entry_name:
+                return True
+        return False
+
+    tax_code = norm_digits(field("los.tax_code"))
+    owner_id = norm_digits(field("los.owner_id_number"))
+    owner_name = normalize_text(field("los.owner_name"))
+
+    shareholders: dict[str, bool] = {}
+    for person in (facts.get("los.shareholders") if facts.has("los.shareholders") else []):
+        name = str(person.get("name") or "").strip()
+        if not name:
+            continue
+        shareholders[name] = hit(
+            "", norm_digits(person.get("id_number")), normalize_text(name)
+        )
+
+    return {
+        f"{prefix}.customer_at_{moment}": hit(tax_code, "", "") if tax_code else None,
+        f"{prefix}.owner_at_{moment}":
+            hit("", owner_id, owner_name) if (owner_id or owner_name) else None,
+        f"{prefix}.shareholders_at_{moment}": shareholders,
+    }
+
+
 def fetch_reference_data(
     facts: Facts,
     tax_code: str,
     config: Any,
     approval_date: str,
     postcheck_date: str,
+    settings: dict,
 ) -> None:
     """Fill every fact that comes from a system query."""
 
     executor = config.query_executor
     if executor is None:
-        for path in _db_facts():
+        for path in db_facts():
             facts.mark_missing(path, NO_EXECUTOR)
         return
 
     def _call(tool_object, **kwargs):
         return tool_object.invoke({"tax_code": tax_code, "executor": executor, **kwargs})
 
-    _query(facts, tuple(path for path, _ in _BEP_FIELDS), "Truy vấn BEP",
-           lambda: _call(bep.get_bep_approval),
-           lambda row: {path: row.get(column) for path, column in _BEP_FIELDS})
+    _query(facts, tuple(path for path, _ in _LOS_FIELDS), "Truy vấn LOS",
+           lambda: _call(los.get_los_approval),
+           lambda row: {path: row.get(column) for path, column in _LOS_FIELDS})
+
+    _query(facts, ("los.shareholders",), "Truy vấn cổ đông trên LOS",
+           lambda: _call(los.get_los_shareholders),
+           lambda items: {"los.shareholders": items})
+
+    _query(facts,
+           ("los.sitevisit_online.industry", "los.sitevisit_online.address"),
+           "Truy vấn khảo sát thực địa RM nhập trên LOS",
+           lambda: _call(los.get_los_sitevisit_online),
+           lambda row: {"los.sitevisit_online.industry": row.get("nganh_nghe"),
+                        "los.sitevisit_online.address": row.get("dia_chi")})
+
+    _query(facts,
+           ("los.financials_online.report_year", "los.financials_online.report_type",
+            "los.financials_online.revenue", "los.financials_online.net_profit"),
+           "Truy vấn BCTC RM nhập trên LOS",
+           lambda: _call(los.get_los_financials_online),
+           lambda row: {"los.financials_online.report_year": row.get("nam"),
+                        "los.financials_online.report_type":
+                            as_report_type(row.get("loai_bao_cao"), settings),
+                        "los.financials_online.revenue": row.get("doanh_thu"),
+                        "los.financials_online.net_profit": row.get("lnst")})
 
     _query(facts,
            ("t24.booking_date", "t24.active_limit",
@@ -308,23 +388,68 @@ def fetch_reference_data(
            lambda: _call(t24.get_collateral),
            lambda items: {"collateral.items": items})
 
-    _query(facts,
-           ("cic.customer_debt_group_at_approval", "cic.owner_debt_group_at_approval"),
-           "Truy vấn CIC trên BCDE",
-           lambda: _call(bcde.get_bcde_cic),
-           lambda row: {"cic.customer_debt_group_at_approval": row.get("customer"),
-                        "cic.owner_debt_group_at_approval": row.get("owner")})
+    _query(facts, ("t24.outstanding",), "Truy vấn dư nợ",
+           lambda: _call(t24.get_outstanding),
+           lambda row: {"t24.outstanding": row.get("outstanding")})
 
-    _query(facts, ("blwl.customer_at_approval", "blwl.owner_at_approval"),
-           "Truy vấn BL/WL trên BCDE",
-           lambda: _call(bcde.get_bcde_blwl),
-           lambda row: {"blwl.customer_at_approval": row.get("customer"),
-                        "blwl.owner_at_approval": row.get("owner")})
+    # CIC and BL/WL are the same lookup at two moments: the approval date and the
+    # review date. One tool each, called twice - a report in the dossier could
+    # only ever carry one of the two.
+    for moment, as_of in (("approval", approval_date), ("postcheck", postcheck_date)):
+        _query(facts,
+               (f"cic.customer_debt_group_at_{moment}", f"cic.owner_debt_group_at_{moment}"),
+               f"Truy vấn CIC tại thời điểm {as_of}",
+               lambda as_of=as_of: _call(cic.get_cic_debt_groups, as_of_date=as_of),
+               lambda row, moment=moment: {
+                   f"cic.customer_debt_group_at_{moment}":
+                       as_debt_group(row.get("customer"), settings),
+                   f"cic.owner_debt_group_at_{moment}":
+                       as_debt_group(row.get("owner"), settings),
+               })
+
+        _query(facts, (f"cic.shareholder_debt_groups_at_{moment}",),
+               f"Truy vấn nhóm nợ cổ đông tại thời điểm {as_of}",
+               lambda as_of=as_of: cic.get_cic_shareholder_debt_groups.invoke({
+                   "shareholders": (facts.get("los.shareholders")
+                                    if facts.has("los.shareholders") else []),
+                   "as_of_date": as_of, "executor": executor}),
+               lambda by_person, moment=moment: {
+                   f"cic.shareholder_debt_groups_at_{moment}": {
+                       name: as_debt_group(group, settings)
+                       for name, group in by_person.items()
+                   }
+               })
+
+        # Lists, matched here rather than in SQL, so a hit can name its entry.
+        for prefix, label, fetch in (
+            ("blwl", "BL/WL", blwl.get_blacklist_watchlist),
+            ("amc", "AMC", amc.get_amc_recovery_list),
+        ):
+            _query(facts,
+                   (f"{prefix}.customer_at_{moment}", f"{prefix}.owner_at_{moment}",
+                    f"{prefix}.shareholders_at_{moment}"),
+                   f"Truy vấn danh sách {label} tại thời điểm {as_of}",
+                   lambda as_of=as_of, fetch=fetch: _call(fetch, as_of_date=as_of),
+                   lambda result, prefix=prefix, moment=moment:
+                       _match_list(facts, result["entries"], prefix, moment))
+
+    _query(facts, ("portfolio.facilities",), "Truy vấn danh mục tín dụng tại TCB",
+           lambda: _call(portfolio.get_portfolio),
+           lambda items: {"portfolio.facilities": items})
+
+    _query(facts, ("cic.collateral_items",), "Truy vấn TSBĐ đăng ký tại CIC",
+           lambda: _call(cic.get_cic_collateral),
+           lambda items: {"cic.collateral_items": items})
 
     _query(facts, ("virac.revenue_by_year", "virac.net_profit_by_year"),
            "Truy vấn Virac",
            lambda: _call(virac.get_virac_financials),
            lambda row: {f"virac.{key}": value for key, value in row.items()})
+
+    _query(facts, ("t24.transactions_by_period",), "Truy vấn giao dịch tài khoản",
+           lambda: _call(t24.get_transaction_summary,
+                         from_date=approval_date, to_date=postcheck_date),
+           lambda items: {"t24.transactions_by_period": items})
 
     _query(facts, ("cashflow.pdld_count",), "Truy vấn giao dịch dòng tiền",
            lambda: _call(t24.get_cashflow_pdld,
@@ -341,24 +466,20 @@ def fetch_reference_data(
 # ---------------------------------------------------------------------------
 
 # fact path <- (extraction slot, block, field within the block)
+#
+# The CIC reports used to be the fourth source here, and the only one carrying an
+# address or a representative's name. They are queried from the system now, so
+# the address comes off the site visit instead - BRD row 14 names the site visit
+# as a source in its own right - and the representative's name has no source at
+# all. That is why doc.owner_name_values is declared in MANUAL_FACTS.
 _IDENTITY_SOURCES: tuple[tuple[str, str, str, str], ...] = (
-    ("doc.customer_name_values", "financial_statement", "customer", "ten"),
-    ("doc.customer_name_values", "proposal", "customer", "ten"),
-    ("doc.customer_name_values", "sitevisit", "customer", "ten"),
-    ("doc.customer_name_values", "cic_s10a", "khach_hang", "ten"),
-    ("doc.customer_name_values", "cic_r20", "khach_hang", "ten"),
-    ("doc.tax_code_values", "financial_statement", "customer", "ma_so_thue"),
-    ("doc.tax_code_values", "proposal", "customer", "ma_so_thue"),
-    ("doc.tax_code_values", "sitevisit", "customer", "ma_so_thue"),
-    ("doc.tax_code_values", "cic_s10a", "khach_hang", "ma_so_thue"),
-    ("doc.tax_code_values", "cic_r20", "khach_hang", "ma_so_thue"),
-    ("doc.address_values", "cic_s10a", "khach_hang", "dia_chi"),
-    ("doc.address_values", "cic_r20", "khach_hang", "dia_chi"),
-    ("doc.owner_name_values", "cic_s10a", "khach_hang", "nguoi_dai_dien"),
-    ("doc.owner_name_values", "cic_r20", "khach_hang", "nguoi_dai_dien"),
-    ("doc.document_date_values", "sitevisit", "survey_info", "survey_date"),
-    ("doc.document_date_values", "cic_s10a", "bao_cao", "ngay_gui"),
-    ("doc.document_date_values", "cic_r20", "bao_cao", "ngay_gui"),
+    ("doc.customer_name_values", "financial_statement", "customer", "name"),
+    ("doc.customer_name_values", "proposal", "customer", "name"),
+    ("doc.customer_name_values", "sitevisit", "customer", "name"),
+    ("doc.tax_code_values", "financial_statement", "customer", "tax_code"),
+    ("doc.tax_code_values", "proposal", "customer", "tax_code"),
+    ("doc.tax_code_values", "sitevisit", "customer", "tax_code"),
+    ("doc.address_values", "sitevisit", "survey_info", "location"),
 )
 
 _FINANCIAL_METRICS: tuple[tuple[str, str], ...] = (
@@ -371,9 +492,7 @@ _FINANCIAL_METRICS: tuple[tuple[str, str], ...] = (
 _NO_SOURCE_DOCUMENT = {
     "doc.customer_name_values": "không chứng từ nào trích xuất được tên khách hàng",
     "doc.tax_code_values": "không chứng từ nào trích xuất được mã số thuế",
-    "doc.address_values": "hồ sơ không có báo cáo CIC, hoặc không đọc được địa chỉ trên đó",
-    "doc.owner_name_values": "hồ sơ không có báo cáo CIC, hoặc không đọc được người đại diện",
-    "doc.document_date_values": "không chứng từ nào trích xuất được ngày lập",
+    "doc.address_values": "hồ sơ không có báo cáo khảo sát thực địa, hoặc không đọc được địa chỉ trên đó",
 }
 
 
@@ -388,39 +507,39 @@ def _block_value(document: PostcheckDocument, slot: str, block: str, key: str) -
     return value if value not in (None, "") else None
 
 
-def _iso_date(value: Any) -> Any:
-    """CIC prints dd/mm/yyyy; the rules read ISO. Anything else passes through."""
+def as_debt_group(value: Any, settings: dict) -> Any:
+    """A debt group as the rules want it: an integer 1-5.
 
-    text = str(value or "").strip()
-    parts = text.split("/")
-    if len(parts) == 3 and all(part.isdigit() for part in parts):
-        day, month, year = parts
-        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
-    return value
+    The view may return the number or the printed Vietnamese label, so both are
+    accepted. A label absent from `debt_group_by_label` returns None, which the
+    caller turns into a marked-missing fact - it is never guessed as group 1.
+    """
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text.isdigit():
+        return int(text)
+    table = {normalize_text(key): number
+             for key, number in (settings.get("debt_group_by_label") or {}).items()}
+    return table.get(normalize_text(text))
 
 
-def _debt_group(payload: Any, settings: dict) -> tuple[int | None, str]:
-    """The worst debt group a CIC report shows, mapped from its printed label."""
+def as_report_type(value: Any, settings: dict) -> Any:
+    """What KIND of financial report this is, as one of the configured names.
 
-    if not isinstance(payload, dict):
-        return None, "không đọc được báo cáo CIC"
-    labels = [str(row.get("nhom_no") or "").strip()
-              for row in payload.get("du_no_hien_tai") or []
-              if str(row.get("nhom_no") or "").strip()]
-    if not labels:
-        return None, "báo cáo CIC không ghi nhóm nợ"
+    Both sides of V09 print their own wording - the RM types one thing into LOS,
+    the statement's own form name says another - so both come through here and
+    land on the same vocabulary. A wording the table does not know returns None,
+    which the caller turns into a marked-missing fact: the alternative is two
+    strings that differ for no reason anybody can act on.
+    """
 
-    table = {normalize_text(key): value
-             for key, value in (settings.get("debt_group_by_label") or {}).items()}
-    groups = [table[normalize_text(label)] for label in labels
-              if normalize_text(label) in table]
-    if not groups:
-        return None, (
-            "nhóm nợ trên báo cáo CIC ghi là "
-            + ", ".join(f"“{label}”" for label in sorted(set(labels)))
-            + " — chưa khai trong debt_group_by_label"
-        )
-    return max(int(group) for group in groups), ""
+    if not value:
+        return None
+    table = {normalize_text(key): name
+             for key, name in (settings.get("financial_report_types") or {}).items()}
+    return table.get(normalize_text(str(value)))
 
 
 def assemble_document_facts(
@@ -434,8 +553,6 @@ def assemble_document_facts(
             value = _block_value(document, slot, block, key)
             if value is None:
                 continue
-            if path == "doc.document_date_values":
-                value = _iso_date(value)
             collected.setdefault(path, []).append(
                 {"filename": document.filename, "value": value}
             )
@@ -461,50 +578,91 @@ def assemble_document_facts(
         reason="hồ sơ không có báo cáo khảo sát thực địa, hoặc không đọc được ngành nghề trên đó",
     )
 
-    _assemble_cic_collateral(facts, documents)
-    _assemble_financials(facts, documents)
+    _assemble_signature(facts, documents)
+    _assemble_photo_evidence(facts, documents)
+    _assemble_financials(facts, documents, settings)
     _assemble_proposal(facts, documents)
-    _assemble_cic(facts, documents, settings)
 
 
-def _assemble_cic_collateral(facts: Facts, documents: list[PostcheckDocument]) -> None:
-    """Collateral as registered at CIC, from the R20 loan-security report.
+def _assemble_photo_evidence(
+    facts: Facts, documents: list[PostcheckDocument]
+) -> None:
+    """What the vision pass saw in each site-visit photograph (V10).
 
-    A third, independent view of the security behind the facility, beside T24
-    (what the bank booked) and the credit application (what the customer
-    declared). `ngay_giai_chap` is the one that matters most: an empty release
-    date means the asset is still pledged, and a filled one means it is not -
-    a facility booked as secured against a released asset is a real finding.
-
-    `gia_tri_trieu_vnd` is already in VND despite the name saying millions: the
-    R20 pass multiplies it by a million on the way out. Do not scale it again.
+    Collected from every photo document, so one unreadable file does not hide
+    what the others showed. No photos at all leaves the fact missing; whether
+    that is a problem is P02's question, decided from the LOS site-visit flag.
     """
 
-    reports = [d for d in documents if isinstance(d.cic_r20, dict)]
-    if not reports:
-        facts.mark_missing(
-            "cic.collateral_items",
-            "hồ sơ không có báo cáo CIC R20 về tài sản bảo đảm",
+    # LOS said no field visit is needed, so "no photo evidence" is the correct
+    # and complete answer - not a gap. Recorded as an empty finding rather than
+    # marked missing, so V10 can pass instead of reading as unchecked.
+    if facts.has("los.is_site_visit") and not facts.get("los.is_site_visit"):
+        facts.set_empty(
+            "doc.sitevisit_photo_evidence",
+            "LOS không yêu cầu khảo sát thực địa nên hồ sơ không cần ảnh",
         )
         return
 
-    items: list[dict[str, Any]] = []
-    for document in reports:
-        for row in document.cic_r20.get("tai_san_bao_dam") or []:
-            if not isinstance(row, dict):
-                continue
-            items.append({
-                "lender": row.get("tctd") or "",
-                "kind": row.get("loai_tai_san") or "",
-                "description": row.get("mo_ta_tai_san") or "",
-                "value": row.get("gia_tri_trieu_vnd"),
-                "released_on": row.get("ngay_giai_chap") or None,
+    photos = [document for document in documents
+              if document.document_type
+              and is_sitevisit_photo_type(document.document_type)]
+
+    evidence = []
+    for document in photos:
+        payload = document.sitevisit_photos
+        for entry in (payload.get("photos") if isinstance(payload, dict) else None) or []:
+            evidence.append({
+                "filename": entry.get("filename") or document.filename,
+                "markers": entry.get("markers") or [],
+                "note": entry.get("description") or "",
             })
-    facts.set("cic.collateral_items", items,
-              reason="báo cáo CIC R20 không liệt kê tài sản bảo đảm nào")
+
+    facts.set(
+        "doc.sitevisit_photo_evidence", evidence,
+        reason=(
+            "hồ sơ không có ảnh khảo sát thực địa" if not photos
+            else f"pass ảnh không đọc được {len(photos)} ảnh khảo sát trong hồ sơ"
+        ),
+    )
 
 
-def _assemble_financials(facts: Facts, documents: list[PostcheckDocument]) -> None:
+def _assemble_signature(facts: Facts, documents: list[PostcheckDocument]) -> None:
+    """P05: do the financial statements carry a digital signature.
+
+    Selected by DOCUMENT TYPE, not by whether extraction read the figures: the
+    signature is a property of the file, and a statement the model failed to
+    parse is still signed or unsigned. Tying this to the extraction result would
+    have made an LLM outage look like an unsigned filing.
+
+    One signed statement is enough. All of them unsigned is a real answer. A
+    dossier whose statements are all in formats the detector cannot judge - a
+    .docx, an .xlsx - leaves the fact MISSING rather than claiming unsigned.
+    """
+
+    statements = [document for document in documents
+                  if document.document_type
+                  and is_financial_statement_type(document.document_type)]
+    if not statements:
+        facts.mark_missing("doc.financials.has_digital_signature", "hồ sơ không có BCTC")
+        return
+
+    judged = [value for value in
+              (has_digital_signature(document.path) for document in statements)
+              if value is not None]
+    facts.set(
+        "doc.financials.has_digital_signature",
+        True if any(judged) else (False if judged else None),
+        reason=(
+            "chưa đọc được chữ ký số trên định dạng BCTC trong hồ sơ ("
+            + ", ".join(sorted({document.extension for document in statements})) + ")"
+        ),
+    )
+
+
+def _assemble_financials(
+    facts: Facts, documents: list[PostcheckDocument], settings: dict
+) -> None:
     """Pull the figures the rules need out of every statement in the dossier.
 
     A dossier may carry several statements: the current year as a scan and the
@@ -544,6 +702,7 @@ def _assemble_financials(facts: Facts, documents: list[PostcheckDocument]) -> No
         for path, _ in _FINANCIAL_METRICS:
             facts.mark_missing(path, reason)
         facts.mark_missing("doc.financials.report_year", reason)
+        facts.mark_missing("doc.financials.report_type", reason)
         facts.mark_missing("doc.financials.revenue_prior_year", reason)
         return
 
@@ -565,12 +724,27 @@ def _assemble_financials(facts: Facts, documents: list[PostcheckDocument]) -> No
     if not years:
         for path, _ in _FINANCIAL_METRICS:
             facts.mark_missing(path, reason)
+        facts.mark_missing("doc.financials.report_type", reason)
         facts.mark_missing("doc.financials.report_year", "BCTC không nêu kỳ báo cáo")
         facts.mark_missing("doc.financials.revenue_prior_year", "BCTC không nêu kỳ báo cáo")
         return
 
     current, prior = years[-1], (years[-2] if len(years) > 1 else None)
     facts.set("doc.financials.report_year", current)
+
+    # V09 compares the KIND of report, and the statements name their own kind
+    # differently on each path - the e-tax filing gives its form name, the model
+    # gives its three-way vocabulary. Both land on the configured names or on
+    # nothing; an audited statement says so on its own and outranks the form name.
+    kinds = []
+    for document in statements:
+        payload = document.financial_statement
+        if (payload.get("audit_opinion") or {}).get("is_audited"):
+            kinds.append(as_report_type("bao cao kiem toan", settings))
+        kinds.append(as_report_type(payload.get("document_type"), settings))
+    known = [kind for kind in kinds if kind]
+    facts.set("doc.financials.report_type", known[0] if known else None,
+              reason="không nhận ra loại báo cáo; bổ sung vào financial_report_types")
 
     current_metrics = by_year.get(f"{PERIOD_LABEL_PREFIX}{current}", {})
     for path, metric in _FINANCIAL_METRICS:
@@ -618,33 +792,6 @@ def _assemble_proposal(facts: Facts, documents: list[PostcheckDocument]) -> None
     facts.set("doc.proposal.collateral_items", items, reason=reason)
 
 
-def _assemble_cic(
-    facts: Facts, documents: list[PostcheckDocument], settings: dict
-) -> None:
-    """Debt groups read from the CIC reports filed with the dossier (BRD 2.4).
-
-    Which report belongs to whom comes from the document type: the customer's
-    own CIC report versus the legal representative's.
-    """
-
-    for path, type_id, who in (
-        ("cic.customer_debt_group_at_postcheck", CUSTOMER_CIC_TYPE, "khách hàng"),
-        ("cic.owner_debt_group_at_postcheck", OWNER_CIC_TYPE, "chủ doanh nghiệp"),
-    ):
-        reports = [d for d in documents
-                   if d.document_type == type_id and isinstance(d.cic_s10a, dict)]
-        if not reports:
-            facts.mark_missing(
-                path, f"hồ sơ không có báo cáo CIC của {who} tra cứu tại thời điểm post-check"
-            )
-            continue
-        group, why = _debt_group(reports[0].cic_s10a, settings)
-        if group is None:
-            facts.mark_missing(path, why)
-        else:
-            facts.set(path, group)
-
-
 # ---------------------------------------------------------------------------
 # 4-5. Grade, then render
 # ---------------------------------------------------------------------------
@@ -670,13 +817,17 @@ def run_postcheck(
     settings = get_settings()
 
     documents = read_case_documents(Path(case_dir), config)
-    extraction_calls = run_extraction_passes(documents, config)
+    extraction_calls = run_extraction_passes(documents, config, settings)
 
     facts = Facts()
     facts.set("case.postcheck_date", postcheck_date,
               reason="chưa truyền ngày rà soát vào run_postcheck")
+    # Systems BEFORE documents: _assemble_photo_evidence has to know whether LOS
+    # asked for a site visit at all, and nothing in the document assembly reads a
+    # system fact - so this order costs nothing and buys that one answer.
+    fetch_reference_data(facts, tax_code, config, approval_date, postcheck_date,
+                         settings)
     assemble_document_facts(facts, documents, settings)
-    fetch_reference_data(facts, tax_code, config, approval_date, postcheck_date)
     facts.mark_manual_facts_missing()
 
     findings = run_rules(RULES, facts, settings)
@@ -691,9 +842,9 @@ def run_postcheck(
         return str(value) if value is not MISSING else fallback
 
     meta = {
-        "customer_name": _or_dash("bep.customer_name"),
-        "tax_code": _or_dash("bep.tax_code", tax_code),
-        "program": _or_dash("bep.program"),
+        "customer_name": _or_dash("los.customer_name"),
+        "tax_code": _or_dash("los.tax_code", tax_code),
+        "program": _or_dash("los.program"),
         "postcheck_date": postcheck_date,
     }
     return PostcheckResult(

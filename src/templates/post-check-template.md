@@ -38,7 +38,7 @@ version: 1
 >
 > Nguồn: Database & Tài liệu upload
 
-<!-- rules: V01 V02 V03 V04 V05 V06 V07 -->
+<!-- rules: V01 V02 V03 V04 V05 V06 V07 V08 V09 V10 -->
 {{BangTieuChi:2.1}}
 
 ### 2.2. Nhận diện dấu hiệu nghi ngờ gian lận
@@ -47,7 +47,7 @@ version: 1
 > - Kiểm tra tính xác thực của thông tin trên chứng từ do ĐVKD cung cấp theo
 >   hướng dẫn của Bộ phận QTRR gian lận.
 
-<!-- rules: F01 F02 -->
+<!-- rules: F01 -->
 {{BangTieuChi:2.2}}
 
 #### Nhận định
@@ -67,7 +67,7 @@ version: 1
 
 > Nguồn: Database & Tài liệu upload
 
-<!-- rules: C01 C02 C03 -->
+<!-- rules: C01 C02 C03 C04 C05 C06 -->
 {{BangTieuChi:2.3.b}}
 
 #### c) Kiểm tra các tác nghiệp của ĐVKD đã thực hiện phù hợp với Quy trình cấp tín dụng
@@ -84,7 +84,7 @@ version: 1
 > soát: (i) Giao dịch tài khoản, giao dịch tín dụng tại TCB; (ii) Giao dịch tín
 > dụng TCTD; (iii) Thông tin khác (nếu có).
 
-<!-- rules: E01 E02 E03 E04 E05 E06 -->
+<!-- rules: E01 E02 E03 E04 E05 E06 E07 E08 -->
 {{BangTieuChi:2.4}}
 
 #### Nhận định

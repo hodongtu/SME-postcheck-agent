@@ -20,7 +20,9 @@ import sys
 #   file names in the upload boxes      the checklist and the format list
 #   the arguments of the run itself     the review date
 #   a tax-filing XML in the dossier     the whole financial statement, read by
-#                                       parse_tax_xml with no model involved
+#                                       parse_tax_xml with no model involved -
+#                                       including the customer block, which is
+#                                       why V01, V02 and F01 are decidable here
 #
 # That last group is the reason the extraction runner must call a pass even
 # when no LLM is configured: the figures are already in the file, and reporting
@@ -35,6 +37,11 @@ OFFLINE_FACTS = frozenset({
     "doc.financials.revenue_prior_year",
     "doc.financials.revenue_current_year",
     "doc.financials.net_profit_current_year",
+    "doc.customer_name_values",
+    "doc.tax_code_values",
+    # Read off the file's own structure - an XMLDSig element, a PDF signature
+    # dictionary - so no model and no database are involved.
+    "doc.financials.has_digital_signature",
 })
 
 CASES = ("case_demo", "case_thieu_ho_so")
