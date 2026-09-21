@@ -100,7 +100,7 @@ cả phần truy vấn, trên SQLite dựng tại chỗ.
                     15 tool truy vấn SQL
 ```
 
-Bảy node LangGraph trong [src/graph.py](src/graph.py), cùng khuôn với
+Bảy node LangGraph trong [src/pipeline.py](src/pipeline.py), cùng khuôn với
 `supervisor.py` bên CreditMemo: một class `PostcheckSupervisor` giữ config, dựng
 đồ thị một lần trong `__init__`, và mỗi bước là một method `_graph_*` nhận state
 rồi trả state. `run_postcheck` chỉ khởi động nó và đóng gói kết quả.
@@ -128,13 +128,18 @@ biết "không có ảnh" là câu trả lời hay là lỗ hổng), và `mark_m
 chạy sau cả hai. Đảo lại thì cả hai thứ tự đều chạy trót lọt, chỉ là báo cáo
 lặng lẽ ghi "chưa kiểm được" cho một tiêu chí vốn kiểm được.
 
-`verify_graph` chốt điều đó bằng cách dựng đồ thị đảo và chấm lại: nếu đảo mà kết
-quả không xấu đi thì chính bài kiểm đó đang không bảo vệ gì.
+`verify_graph` chốt điều đó bằng cách dựng đồ thị đảo và chấm lại: nếu đảo mà
+chạy ngon và chấm y hệt thì chính bài kiểm đó đang không bảo vệ gì.
+
+Các bước và đồ thị nằm **cùng một file**: đọc từ trên xuống là các bước, rồi tới
+`PostcheckSupervisor` khai thứ tự, rồi `run_postcheck` khởi động. Tách đôi từng
+buộc hai file phải import lẫn nhau, nên ba lời gọi phải hoãn import vào trong
+thân hàm — một cái giá trả cho ranh giới không mang lại gì.
 
 In sơ đồ từ chính đồ thị, không vẽ tay:
 
 ```python
-from src.graph import build_postcheck_graph
+from src.pipeline import build_postcheck_graph
 print(build_postcheck_graph().get_graph().draw_mermaid())
 ```
 

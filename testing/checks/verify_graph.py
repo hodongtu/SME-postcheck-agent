@@ -48,7 +48,7 @@ BRANCHING_NODE = "grade_criteria"
 
 def main() -> int:
     from src.config import Config
-    from src.graph import NODE_ORDER, PostcheckSupervisor
+    from src.pipeline import NODE_ORDER, PostcheckSupervisor
     from src.tools._executor import sqlite_executor
 
     problems: list[str] = []
@@ -56,7 +56,7 @@ def main() -> int:
     declared = list(NODE_ORDER)
     if declared != list(EXPECTED_ORDER):
         problems.append(
-            f"src/graph.py declares {declared}, this check expects "
+            f"src/pipeline.py declares {declared}, this check expects "
             f"{list(EXPECTED_ORDER)} - if the change is deliberate, record it here"
         )
 
