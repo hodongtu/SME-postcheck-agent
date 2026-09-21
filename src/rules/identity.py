@@ -13,8 +13,6 @@ what id, title and severity, and on which facts, is in src/rules/registry.py -
 one catalogue for all of them, so there is one place to look.
 """
 
-from __future__ import annotations
-
 from typing import Any, Callable
 
 from src.facts import Facts
@@ -140,17 +138,7 @@ def check_sitevisit_online(facts: Facts, settings: dict) -> Verdict:
 
 
 def check_financials_online(facts: Facts, settings: dict) -> Verdict:
-    """The RM keyed in the SAME statements that were filed - period and kind.
-
-    Deliberately not the figures. Whether the numbers agree is a question about
-    the content; this one asks whether the two sides are even talking about the
-    same document, and a mismatch here would make any figure comparison
-    meaningless anyway.
-
-    Report kind reaches both facts through `financial_report_types` in
-    config/programs.yaml: each side prints its own wording, and a label the table
-    does not know leaves the fact missing rather than being guessed into place.
-    """
+    """The RM keyed in the SAME statements that were filed - period and kind. """
 
     keyed_year = str(facts.get("los.financials_online.report_year"))
     filed_year = str(facts.get("doc.financials.report_year"))
@@ -175,13 +163,7 @@ def check_financials_online(facts: Facts, settings: dict) -> Verdict:
 
 
 def check_persona_photos(facts: Facts, settings: dict) -> Verdict:
-    """Do the site-visit photos show what this customer's persona should show.
-
-    The model never sees the persona and never decides the verdict: it labels
-    each photo from a closed vocabulary, and the counting happens here. That is
-    what keeps this criterion testable from a JSON fixture like the other 39,
-    and what stops the answer from being whatever the model was nudged toward.
-    """
+    """Do the site-visit photos show what this customer's persona should show. """
 
     if not facts.get("los.is_site_visit"):
         return passed(

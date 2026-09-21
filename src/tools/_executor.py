@@ -1,7 +1,5 @@
 """Row helpers plus the import-time guard every query tool relies on."""
 
-from __future__ import annotations
-
 from typing import Any
 
 
@@ -15,12 +13,7 @@ def one_row(executor: Any, sql: str, params: dict) -> dict:
 
 
 def assert_registry_is_sound(tools: tuple[Any, ...]) -> None:
-    """No tool appears twice in the registry.
-
-    A duplicate is silent in Python and wrong everywhere it is counted: the
-    pipeline would call the query twice, and `verify_tools_are_used` would report
-    a tool total that does not match the tools there are.
-    """
+    """No tool appears twice in the registry. """
 
     seen: set[str] = set()
     for tool_object in tools:
@@ -31,12 +24,7 @@ def assert_registry_is_sound(tools: tuple[Any, ...]) -> None:
 
 
 def assert_no_model_arguments(tools: tuple[Any, ...]) -> None:
-    """No tool may expose an argument a model could fill in.
-
-    Same guard as the import-time assertion at the bottom of SME_creditmemo's
-    src/agents/specialist.py. These tools reach customer credit data, so the
-    parameters must come from the pipeline and nowhere else.
-    """
+    """No tool may expose an argument a model could fill in. """
 
     for tool_object in tools:
         schema = getattr(tool_object, "tool_call_schema", None)
@@ -49,17 +37,7 @@ def assert_no_model_arguments(tools: tuple[Any, ...]) -> None:
 
 
 def sqlite_executor(db_path: str) -> Any:
-    """A `query_executor` backed by a SQLite file.
-
-    Exists so the whole pipeline can be run against a fixed dataset with no
-    database access: the dummy dataset under samples/dummy_db/ is what the
-    end-to-end check grades. SQLite already understands the `:name` parameters
-    the tools' SQL uses, and dates are stored as ISO text so BETWEEN and <=
-    compare correctly by ordinary string ordering.
-
-    One connection per call: these queries are small, reads only, and a
-    short-lived connection keeps the executor safe to hand to anything.
-    """
+    """A `query_executor` backed by a SQLite file. """
 
     import sqlite3
 

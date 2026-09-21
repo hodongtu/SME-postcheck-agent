@@ -1,19 +1,4 @@
-"""Findings -> Markdown, poured into src/templates/post-check-template.md.
-
-There is no LLM in this file. The verdict table is what somebody signs, so
-Python writes it: the same findings.json always renders the same report.
-
-The template owns the shape - headings, order, which criteria sit under which
-section - so changing the report means editing one Markdown file. This module
-owns only the values: the tables, the summary, the appendix. The two commentary
-paragraphs are the single exception, written by a model and spliced in as
-values like any other.
-
-Identifiers and comments are English; every string the reviewer reads is
-Vietnamese.
-"""
-
-from __future__ import annotations
+"""Findings -> Markdown, poured into src/templates/post-check-template.md. """
 
 from src.facts import (
     CIC,
@@ -38,9 +23,6 @@ STATUS_MARK = {"PASS": "Đạt", "FAIL": "**Không đạt**", "INSUFFICIENT_DATA
 EMPTY_TABLE = "_Không có tiêu chí nào trong mục này._"
 EMPTY_COMMENTARY = "_Chưa có nhận định cho mục này._"
 
-# Which collection rows belong to which part of section 1, and which facts each
-# row stands for. Kept here rather than in the template because it is a mapping
-# between data and prose, not a matter of layout.
 COLLECTION_ROWS: dict[str, tuple[tuple[str, str, tuple[str, ...]], ...]] = {
     "1.1": (
         ("Thông tin khách hàng và HMTD được PD trên hệ thống LOS", LOS,
@@ -97,19 +79,7 @@ def _criteria_table(findings: list[Finding]) -> str:
 
 
 def _no_approval_record(facts: Facts | None) -> bool:
-    """Did LOS hold no approval at all for this customer.
-
-    Distinguishes a wrong lookup key from an incomplete dossier. They look
-    identical in the report otherwise - both fill it with missing-data rows - and
-    the sentence below then blames the dossier for a tax code that is simply not
-    in the database. A reviewer acting on that would go back to the business unit
-    and ask for documents that are already there.
-
-    LOS specifically, not "no system fact at all": CASHFLOW_PDLD_SQL is a
-    COUNT(*), which returns a row for a customer nobody has ever heard of, so one
-    fact always arrives and a broader test would never fire. LOS is the approval
-    record itself - no row there means this review has no subject.
-    """
+    """Did LOS hold no approval at all for this customer. """
 
     if facts is None:
         return False
@@ -197,12 +167,7 @@ def build_values(
     commentary: dict[str, str],
     facts: Facts | None,
 ) -> dict[str, str]:
-    """One value per placeholder the template asks for.
-
-    Driven by what the template wants, not by what this module happens to
-    produce: a section added to the template appears here as a missing value,
-    and Template.render refuses to print a report with the hole in it.
-    """
+    """One value per placeholder the template asks for. """
 
     by_id = {finding.rule_id: finding for finding in findings}
     values: dict[str, str] = {

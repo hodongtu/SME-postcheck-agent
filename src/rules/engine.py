@@ -16,8 +16,6 @@ Identifiers and comments are English; the strings a reviewer reads are
 Vietnamese.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Callable, Literal

@@ -1,11 +1,5 @@
 """LLM extraction of full financial statement bundles into structured JSON"""
 
-# CHANGED FROM SME_creditmemo: both extraction paths now return through
-# conform_financial_statement(), so a PDF and an e-tax XML produce the same
-# record. The XML path used to skip the normalisers and to set no source
-# marker, which left FinancialRatioCalculator.SOURCE_RANK - written to rank an
-# exact filing above a scan - with nothing to rank on. Additive; safe to port back.
-
 import re
 from typing import Any
 
@@ -437,24 +431,7 @@ _EMPTY_STATEMENT = {
 
 
 def conform_financial_statement(result: dict[str, Any], source: str) -> dict[str, Any]:
-    """The one shape both paths return, whatever the file was.
-
-    Same normalisers, same order, for a scan and for a tax filing alike, then
-    the source marker. The marker is not decoration: SOURCE_RANK in
-    FinancialRatioCalculator ranks "xml" above "llm", so a figure read exactly
-    out of a filing outranks the same figure guessed from a scan - but only if
-    somebody sets it.
-
-    On the XML path the normalisers are no-ops today: the period labels already
-    read "Năm YYYY" and source_unit is already "dong", so the multiplier is 1.
-    They run anyway, because the value here is having ONE definition of the
-    output shape rather than two that happen to agree.
-
-    `document_type` is deliberately left as each path writes it - the XML gives
-    the real form name, the model gives its three-way vocabulary. No rule reads
-    it, and flattening a filing's own form name into "BCTC riêng lẻ" would be
-    asserting something the document never said.
-    """
+    """The one shape both paths return, whatever the file was. """
 
     result = drop_heading_rows(normalize_amounts(normalize_extraction_periods(result)))
     result.setdefault("customer", {"name": "", "tax_code": ""})

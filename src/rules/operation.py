@@ -10,8 +10,6 @@ what id, title and severity, and on which facts, is in src/rules/registry.py -
 one catalogue for all of them, so there is one place to look.
 """
 
-from __future__ import annotations
-
 from src.facts import Facts
 from src.rules._compare import norm_text
 from src.rules.criteria import unsecured_eligible
@@ -19,12 +17,7 @@ from src.rules.engine import Verdict, as_date, failed, passed, variance_pct
 
 
 def check_within_validity(facts: Facts, settings: dict) -> Verdict:
-    """The limit was booked while the approval was valid - BOTH ends of the window.
-
-    BRD row 35 asks whether the booking happened while the approval was still in
-    force, which is an interval. Booking before the batch took effect is as wrong
-    as booking after it expired, and only the late half used to be checked.
-    """
+    """The limit was booked while the approval was valid - BOTH ends of the window. """
 
     booked = as_date(facts.get("t24.booking_date"))
     valid_from = as_date(facts.get("los.batch_valid_from"))

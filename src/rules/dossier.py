@@ -5,8 +5,6 @@ what id, title and severity, and on which facts, is in src/rules/registry.py -
 one catalogue for all of them, so there is one place to look.
 """
 
-from __future__ import annotations
-
 from datetime import date
 
 from src.agents.documents.document_matrix import get_type
@@ -50,9 +48,6 @@ def check_checklist(facts: Facts, settings: dict) -> Verdict:
         )
 
     present = {str(type_id) for type_id in facts.get("doc.types_present")}
-    # A `when` item is required only if its condition holds. So far the only one
-    # is the site-visit photos, which LOS says whether this file needs at all -
-    # demanding them of a desk review would be a finding against nobody.
     required = [
         item for item in checklist
         if item.get("requirement") == "mandatory"

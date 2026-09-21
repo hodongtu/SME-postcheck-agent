@@ -1,19 +1,4 @@
-"""The extraction passes, declared once each.
-
-This module is the WIRING, not the extraction. The prompts and the extract
-functions live in src/agents/extraction/, copied verbatim from SME_creditmemo.
-Here we only say which pass runs on which document type, where its LLM comes
-from on Config, and which PostcheckDocument slot receives the result.
-
-Those modules were tuned over many real runs - monetary-unit handling, period-label normalisation,
-reading a tax-filing XML without an LLM, the way CIC prints numbers - and a
-comparison rule is only as right as the figure it is given, so none of them is
-rewritten here.
-
-Same shape as SME_creditmemo's EXTRACTION_PASSES (supervisor.py:93), minus the
-fields post-check does not use. There is deliberately no `batch` field: one
-document, one call.
-"""
+"""The extraction passes, declared once each. """
 
 from __future__ import annotations
 
@@ -52,13 +37,7 @@ def _always_spends(document: PostcheckDocument) -> bool:
 
 
 def _spends_unless_xml(document: PostcheckDocument) -> bool:
-    """A tax-filing XML is parsed deterministically, so it costs nothing.
-
-    extract_financial_statement_data tries parse_tax_xml before it touches the
-    chain. The runner still has to know, because the budget is about money
-    rather than about correctness - and because a pass that cannot spend must
-    run even when no LLM is configured at all.
-    """
+    """A tax-filing XML is parsed deterministically, so it costs nothing. """
 
     return document.extension != ".xml"
 
@@ -74,11 +53,7 @@ class ExtractionPass:
     llm_attr: str
     build_chain: Callable[[Any], Any]
     extract: Callable[..., tuple[dict[str, Any] | None, str]]
-    # Whether running this pass on this document costs an LLM call.
     spends_llm_call: Callable[[PostcheckDocument], bool] = _always_spends
-    # This pass reads the FILE, not the text extracted from it. Image documents
-    # have extraction_status "unsupported" and empty content, so the runner skips
-    # them by default - a vision pass has to opt back in.
     reads_file: bool = False
 
 
@@ -153,17 +128,7 @@ _validate()
 def run_extraction_passes(
     documents: list[PostcheckDocument], config: Any, settings: dict
 ) -> dict[str, int]:
-    """Run each applicable pass over each document. Returns calls made per pass.
-
-    The budget is a hard ceiling on LLM calls per review; a document skipped
-    because of it records that as its error, so the reason reaches the report
-    instead of looking like an extraction that returned nothing.
-
-    A pass that costs nothing for this document runs whether or not an LLM is
-    configured. That is not an optimisation: a tax-filing XML carries the
-    figures already, and refusing to read them because no model was wired would
-    report missing data about a file sitting right there.
-    """
+    """Run each applicable pass over each document. Returns calls made per pass. """
 
     remaining = config.max_extraction_calls
     photos_left = getattr(config, "max_photo_calls", config.max_extraction_calls)

@@ -2,7 +2,6 @@ import re
 import unicodedata
 
 
-# .docx thêm cho post-check: BRD 2.3.a cho phép chứng từ định dạng Word.
 SUPPORTED_EXTENSIONS = frozenset(
     {".pdf", ".docx", ".xlsx", ".xls", ".csv", ".txt", ".md", ".pptx", ".xml"}
 )
@@ -36,7 +35,6 @@ def show_graph(graph, xray=False):
         )
 
     try:
-        # Pyppeteer needs the notebook event loop to allow nested async calls.
         import nest_asyncio
         nest_asyncio.apply()
 

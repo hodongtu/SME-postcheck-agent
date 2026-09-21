@@ -1,20 +1,4 @@
-"""Read src/templates/*.md: the report's shape, kept out of Python.
-
-The frontmatter split is SME_creditmemo's, from src/agents/specialist.py. What
-is added here is the rest of the contract this project needs:
-
-  - `{{Name}}` and `{{Name:section}}` placeholders, and a render that REFUSES to
-    leave one behind. A template naming a value nobody fills would otherwise
-    print a report with a hole where a verdict table belongs.
-  - `<!-- rules: V01 V02 -->` markers. The template decides which criteria are
-    printed under which section, so it is also the only place that knows whether
-    every rule is printed once. verify_template reads these.
-  - a guidance region after <!--GUIDANCE-->, which is prompt material for the
-    commentary paragraphs and is never printed.
-
-Identifiers and comments are English; the template content is Vietnamese
-because it is what the reviewer reads.
-"""
+"""Read src/templates/*.md: the report's shape, kept out of Python. """
 
 from __future__ import annotations
 
@@ -86,11 +70,7 @@ class Template:
         return tuple(seen)
 
     def render(self, values: dict[str, str]) -> str:
-        """Fill the body. An unfilled placeholder is an error, not a blank.
-
-        A report with a silent hole in it is worse than one that fails to
-        render: nobody notices a section that simply is not there.
-        """
+        """Fill the body. An unfilled placeholder is an error, not a blank. """
 
         missing = [name for name in self.placeholders() if name not in values]
         if missing:
@@ -115,11 +95,7 @@ class Template:
         )
 
     def rules_of(self, section: str) -> tuple[str, ...]:
-        """Rule ids declared for a section by its <!-- rules: ... --> marker.
-
-        Read from the marker nearest above that section's table, which is how
-        the template reads to a person too.
-        """
+        """Rule ids declared for a section by its <!-- rules: ... --> marker. """
 
         anchor = self.body.find(f"{{{{BangTieuChi:{section}}}}}")
         if anchor < 0:

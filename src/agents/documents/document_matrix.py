@@ -80,19 +80,7 @@ def _parse_agents(
     programs: tuple[str, ...],
     where: str,
 ) -> dict[str, dict[str, str]]:
-    """Expand the `agents` block into {agent: {program: level}}.
-
-    Accepts a scalar level (same across every loan program) or an explicit
-    per-program map. A partial map is rejected rather than back-filled: the
-    whole point of splitting the four programs is that a future divergence must
-    be stated, not guessed.
-
-    An EMPTY mapping is allowed and means "no specialist consumes this type".
-    That is not the same as deleting the type: the document is still recognised,
-    still named correctly in the source list, and still counts toward the upload
-    box it was filed in — it simply is not fed to anyone. Collateral documents
-    sit here now that risk assessment is gone.
-    """
+    """Expand the `agents` block into {agent: {program: level}}. """
 
     if raw is None or raw == {}:
         return {}
@@ -378,11 +366,7 @@ def is_ledger_type(type_id: str) -> bool:
 
 
 def describe_types_for_prompt(group_id: str = "") -> str:
-    """Render the type catalogue for the classifier LLM prompt.
-
-    Built from the matrix so the prompt can never list a type the matrix does
-    not define (or miss one it does).
-    """
+    """Render the type catalogue for the classifier LLM prompt. """
 
     lines: list[str] = []
     current_group: str | None = None

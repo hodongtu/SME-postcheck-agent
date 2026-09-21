@@ -93,35 +93,15 @@ def build_sitevisit_photo_extraction_chain(llm: Any) -> Any:
     return llm
 
 
-# Enough for a vision model to tell a warehouse from an office. The OCR path uses
-# 300 for character shapes; nothing here depends on reading small print, and the
-# payload doubles with every step up.
 PHOTO_PAGE_DPI = 150
 
-# A page of a photo dossier is often a COLLAGE - four or six shots pasted into a
-# Word page and exported. Rendering that page as one image costs each photo most
-# of its resolution and collapses six scenes into one answer, so when a page
-# holds several embedded images they are pulled out and sent individually, at
-# whatever resolution the camera produced.
-#
-# Two or more, not one: a scanned page is a single embedded image that IS the
-# page, and a page with one pasted photo is served just as well by rendering it -
-# which also covers anything drawn as vector art rather than placed as an image.
 MIN_COLLAGE_PHOTOS = 2
 
-# Below this on either side it is a logo, a rule, a bullet, or one tile of a
-# tiled scan - not a photograph of a business.
 MIN_EMBEDDED_PHOTO_PX = 200
 
 
 def _images_from_file(path: str, max_images: int) -> list[tuple[str, str, str]]:
-    """(label, media type, base64) for every image this file carries.
-
-    An image file yields one. A PDF yields one per page, EXCEPT where a page is a
-    collage of several photographs - then one per photograph. Most dossiers arrive
-    as a single PDF rather than as loose files, and most of those pages carry more
-    than one shot, so this is the ordinary case rather than the exotic one.
-    """
+    """(label, media type, base64) for every image this file carries. """
 
     file_path = Path(path)
     suffix = file_path.suffix.lower()
@@ -191,8 +171,6 @@ def _collage_photos(page: Any) -> list[Any]:
 
     if len(found) < MIN_COLLAGE_PHOTOS:
         return []
-    # Reading order: down the page, then across. get_bounds is (left, bottom,
-    # right, top) with y growing upward, so the top edge sorts descending.
     return sorted(found, key=lambda o: (-o.get_bounds()[3], o.get_bounds()[0]))
 
 

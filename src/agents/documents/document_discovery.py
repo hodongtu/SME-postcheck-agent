@@ -33,12 +33,7 @@ def box_ids() -> frozenset[str]:
 
 
 def group_from_path(path: str) -> str:
-    """The upload box a file came from, or "" when no ancestor names one.
-
-    Every ancestor is checked, not just the parent: discovery recurses, so a file
-    at ``ho_so_tai_chinh/2025/BCTC.pdf`` used to be found and then lose its box.
-    Nearest ancestor wins. "" restores the pre-upload-box behaviour exactly.
-    """
+    """The upload box a file came from, or "" when no ancestor names one. """
 
     ids = box_ids()
     for parent in Path(path).parents:
@@ -48,12 +43,7 @@ def group_from_path(path: str) -> str:
 
 
 def discover_documents(input_paths: list[str], max_files: int = 50) -> list[str]:
-    """Supported files under the given paths, recursively, de-duplicated.
-
-    Unreadable files are named on the way past rather than dropped in silence: a
-    folder of twelve XML tax returns once produced a report built on nothing at
-    all, with no line anywhere saying so.
-    """
+    """Supported files under the given paths, recursively, de-duplicated. """
 
     files = []
     unreadable: list[str] = []

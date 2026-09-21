@@ -1,11 +1,5 @@
 """Read Vietnamese e-tax XML filings — financial statements and VAT returns."""
 
-# CHANGED FROM SME_creditmemo: the financial_statement_extraction record now
-# carries a `customer` block. The taxpayer was already parsed onto TaxXmlResult
-# and simply never reached the record, so a dossier whose statements arrived as
-# a tax filing offered no name or tax code to compare against - the identity and
-# consistency rules lost a source for no reason. Additive; safe to port back.
-
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field

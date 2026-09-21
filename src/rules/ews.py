@@ -8,8 +8,6 @@ what id, title and severity, and on which facts, is in src/rules/registry.py -
 one catalogue for all of them, so there is one place to look.
 """
 
-from __future__ import annotations
-
 from src.facts import Facts
 from src.rules.criteria import SHAREHOLDER_PREFIX, _subjects_on_list
 from src.rules.engine import Verdict, failed, passed, variance_pct

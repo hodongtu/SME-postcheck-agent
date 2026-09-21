@@ -23,10 +23,6 @@ def _read_csv_rows(csv_path: str) -> list[list[str]]:
                 csv_file.seek(0)
                 try:
                     dialect = csv.Sniffer().sniff(sample)
-                    # The sniffer can return a delimiter csv.reader then refuses
-                    # ("bad delimiter value"), and that error is raised on read,
-                    # outside the guard above. A one-character delimiter is the
-                    # only thing csv.reader accepts, so check before trusting it.
                     if len(getattr(dialect, "delimiter", "") or "") != 1:
                         dialect = csv.excel
                 except csv.Error:

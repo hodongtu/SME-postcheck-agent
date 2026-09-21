@@ -4,13 +4,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-
-# The document matrix is copied verbatim from SME_creditmemo, and its `agents:`
-# keys are validated against this set on load. Post-check does not route to
-# specialist agents - it borrows the matrix for keyword-based document
-# identification (BRD 2.3.a: map each checklist item from the file name) and
-# for the per-type extraction flags. Keeping the names identical is what lets
-# document_matrix.py stay unmodified.
 SPECIALIST_DOCUMENT_AGENTS = frozenset({
     "FINANCIAL_ANALYSIS_AGENT",
     "BUSINESS_ACTIVITY_AGENT",
@@ -36,12 +29,10 @@ class PostcheckDocument:
     extraction_status: str = "success"
     extraction_error: str = ""
 
-    # Identification (src/agents/documents/document_classification.py)
     document_type: str = ""           # a DocumentType.id, or "" when unrecognised
     document_group: str = ""
     document_type_note: str = ""
 
-    # Extraction passes (src/passes.py)
     financial_statement: dict[str, Any] | None = None
     financial_statement_error: str = ""
     proposal: dict[str, Any] | None = None

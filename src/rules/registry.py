@@ -15,8 +15,6 @@ silent unchecked row: it raises when this module is first imported, which happen
 before any run.
 """
 
-from __future__ import annotations
-
 from src.rules import criteria, dossier, ews, fraud, identity, operation
 from src.rules.engine import Rule, validate_needs
 

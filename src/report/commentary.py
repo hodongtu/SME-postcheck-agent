@@ -1,20 +1,4 @@
-"""The two commentary paragraphs - the only prose a model writes into the report.
-
-BRD 2.2 defers to the fraud risk team's guidance and 2.4 to expert judgement.
-Those are the only two places a model contributes, and it may only narrate
-findings that are already decided: the verdict table never passes through an
-LLM.
-
-The model's entire prompt lives in the guidance region of
-src/templates/post-check-template.md, next to the sections it serves. There is
-no second copy in Python: changing how the model writes is a Markdown edit and
-only a Markdown edit.
-
-What a prompt cannot guarantee, audit_commentary checks afterwards. A rule that
-only exists in a prompt is a request; this is the counterpart in code.
-"""
-
-from __future__ import annotations
+"""The two commentary paragraphs - the only prose a model writes into the report. """
 
 import re
 from typing import Any
@@ -33,10 +17,6 @@ _RULE_ID = re.compile(r"\b([VFPCOE]\d\d)\b")
 _HEADING = re.compile(r"^#{1,6}\s", re.M)
 _BULLET = re.compile(r"^\s*[-*+]\s|^\s*\d+[.)]\s", re.M)
 _SENTENCE_END = re.compile(r"[.!?]+(?:\s|$)")
-
-# Longest first. The failing label contains the passing one as a substring, so
-# a naive scan would read a failing verdict as a passing one and find nothing
-# wrong with a paragraph that contradicts the table.
 _VERDICT_WORDS = ("không đạt", "thiếu dữ liệu", "đạt")
 
 
@@ -64,8 +44,6 @@ def audit_commentary(text: str, findings: list[Finding]) -> tuple[str, list[str]
     )
     known_numbers = {_digits(match) for match in _NUMBER.findall(source)}
 
-    # Rule ids carry digits ("F02"); scanning them as figures would report the
-    # model for quoting the very criteria it is asked to narrate.
     without_ids = _RULE_ID.sub(" ", text)
     invented = sorted(
         {match for match in _NUMBER.findall(without_ids)
@@ -136,7 +114,6 @@ def build_commentary(
         if not rows:
             continue
 
-        # One chain per section: the guidance differs, so the prompt differs.
         chain = (
             ChatPromptTemplate.from_messages([
                 ("system", template.guidance(section)),
@@ -147,9 +124,7 @@ def build_commentary(
         )
         try:
             written = chain.invoke({"section": section, "findings": _describe(rows)})
-        except Exception as exc:                    # noqa: BLE001
-            # Surfaced in the report rather than swallowed: a missing commentary
-            # must not look like a deliberate silence.
+        except Exception as exc:                 
             out[section] = (
                 f"_Chưa sinh được nhận định cho mục này: {type(exc).__name__}: {exc}_"
             )

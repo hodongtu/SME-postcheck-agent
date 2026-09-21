@@ -1,11 +1,4 @@
-"""Comparison helpers for the identity and consistency rules.
-
-Matching is exact after normalisation, deliberately. Fuzzy similarity was
-considered and rejected: a 0.85 threshold is a number nobody can defend to a
-credit committee, and a near-miss on a tax code is not a near-miss.
-"""
-
-from __future__ import annotations
+"""Comparison helpers for the identity and consistency rules. """
 
 import re
 from typing import Any, Callable

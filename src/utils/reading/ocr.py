@@ -1,11 +1,4 @@
-"""OCR helpers for PDF documents.
-
-Pipeline per page: rasterize -> ruled-line removal -> image preprocessing
-(grayscale, denoise, deskew, Otsu threshold, optional upscale) -> layout-aware
-Tesseract OCR -> post-OCR text cleanup. Results are cached on disk keyed by file
-content hash + OCR config so re-runs of the notebook do not re-OCR the same
-document.
-"""
+"""OCR helpers for PDF documents. """
 
 import hashlib
 import json
@@ -45,40 +38,8 @@ def _ocr_config() -> dict[str, object]:
         "layout": os.getenv("OCR_LAYOUT", "1") != "0",
         "upscale": float(os.getenv("OCR_UPSCALE", "1.0")),
         "cache_dir": os.getenv("OCR_CACHE_DIR", ""),
-        # Ruled-table borders confuse Tesseract's line-height estimate badly
-        # enough to merge two table rows into one unreadable blob — see
-        # _remove_ruled_lines. Unlike denoise/binarize below, this is not a
-        # scan-quality tradeoff: measured on a clean 300dpi render, it took a
-        # 12-row balance table from 1 correct row to 12. On independent by
-        # design (thin straight rules vs. character strokes), so it stays on
-        # even when the rest of ``preprocess`` is off.
         "deline": os.getenv("OCR_DELINE", "1") != "0",
-        # OFF by default, and the reason is a measured split rather than a
-        # verdict on the detector as a whole. Measured on testing/samples:
-        #
-        #   180° verdicts: 4 of 4 wrong. On BCTC_VVS_2025_short.pdf the detector
-        #     asked to flip 4 of 11 upright pages, turning "Công ty cổ phần Đầu
-        #     tư Phát triển May Việt Nam" into "é fy BA uaẩn8h) { FTN LAAN)".
-        #   90° verdicts: 4 of 4 right. On BCTC_VVS_2024.pdf pages 29-31 and 33
-        #     are genuinely sideways — 0 Vietnamese keywords upright, 10-25 once
-        #     rotated.
-        #
-        # So leaving this off is a real trade: it stops the 180° damage and
-        # costs the 90° repair. Those four pages of BCTC_VVS_2024.pdf reach the
-        # agents as noise while it is off. Enable it for a scan set where pages
-        # are genuinely sideways and the 180° risk is worth accepting.
-        #
-        # The earlier claim here — "measured to have no false positives on an
-        # already-correct page" — is the one thing now known to be false; it is
-        # what kept this on while it was corrupting a third of a statement.
-        #
-        # Speed is NOT the argument either way: once pages OCR concurrently the
-        # extra Tesseract pass costs ~2.2s on a 43-page file (24.0s vs 21.8s).
         "auto_rotate": os.getenv("OCR_AUTO_ROTATE", "0") != "0",
-        # OCR is the pipeline's slowest step and Tesseract runs out-of-process,
-        # so threads scale it nearly linearly. Bounded rather than unbounded:
-        # each worker holds a 300dpi page (~25 MB) plus its own tesseract
-        # process.
         "max_workers": max(
             1,
             int(os.getenv("OCR_MAX_WORKERS", "0")) or min(8, os.cpu_count() or 1),

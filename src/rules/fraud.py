@@ -10,8 +10,6 @@ what id, title and severity, and on which facts, is in src/rules/registry.py -
 one catalogue for all of them, so there is one place to look.
 """
 
-from __future__ import annotations
-
 from src.facts import Facts
 from src.rules._compare import distinct, make_address_normalizer, norm_digits, norm_text, rows
 from src.rules.engine import Verdict, failed, passed
@@ -36,8 +34,6 @@ def check_internal_consistency(facts: Facts, settings: dict) -> Verdict:
     unread: list[str] = []
     checked = 0
     for label, path, normalizer in fields:
-        # Not in this rule's `needs`: a field no document carries is compared over
-        # the documents that do carry it, and named in the verdict when none do.
         pairs = rows(facts.get(path)) if facts.has(path) else []
         if not pairs:
             unread.append(label)

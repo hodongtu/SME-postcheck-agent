@@ -1,13 +1,4 @@
-"""Five steps, in order, with no shared state.
-
-SME_creditmemo needs a LangGraph StateGraph because it has four agent branches
-and a blocking condition. Post-check has one path, so a one-branch graph would
-only be function calls written the long way.
-
-One run reviews ONE credit application. There is no batch mode.
-"""
-
-from __future__ import annotations
+"""Five steps, in order, with no shared state. """
 
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -36,7 +27,7 @@ from src.report.render import render_report
 from src.rules.engine import Finding, run_rules, summarise
 from src.rules.registry import RULES
 from src.settings import get_settings
-from src.tools import amc, los, blwl, cic, portfolio, t24, virac
+from src.tools import amc, los, blwl, ics, portfolio, t24, virac
 from src.types import PostcheckDocument, to_dict_list
 from src.rules._compare import norm_digits
 from src.utils.common import SUPPORTED_EXTENSIONS, normalize_text
@@ -75,21 +66,7 @@ class PostcheckResult:
 # ---------------------------------------------------------------------------
 
 def read_case_documents(case_dir: Path, config: Any) -> list[PostcheckDocument]:
-    """Find the files of ONE case, read their text, identify each by filename.
-
-    EVERY file in the upload boxes becomes a document, including formats the
-    readers cannot open. That matters for rule P03: the regulation lists the
-    permitted formats, and a dossier holding a phone photo instead of a document
-    is a P03 failure. Dropping unreadable files before the rules see them would
-    make P03 pass on a dossier full of JPEGs - a check that cannot see the
-    violation it exists to catch.
-
-    The single-case guard matters more than it looks. Upload boxes are the
-    subdirectories of a case, so pointing at a parent folder that holds several
-    cases would merge two customers' documents into one Facts and the rules
-    would grade a dossier that does not exist. That is silent and severe, so it
-    raises.
-    """
+    """Find the files of ONE case, read their text, identify each by filename. """
 
     case_root = Path(case_dir).resolve()
     documents: list[PostcheckDocument] = []
@@ -146,20 +123,7 @@ def read_case_documents(case_dir: Path, config: Any) -> list[PostcheckDocument]:
 
 
 def _identify(document: PostcheckDocument, config: Any) -> None:
-    """Name the checklist item this file is, or leave it unnamed.
-
-    filename_keyword_owner alone is not enough here: it returns nothing when two
-    types match the name, because SME_creditmemo settles that with an LLM
-    classifier this pipeline does not have. Three CIC reports all match the
-    keyword "thong tin cic", so every one of them would come back unidentified
-    and the R20 pass would never run. rule_classify_document scores them and
-    breaks the tie by how much of the filename the winning keyword covers.
-
-    Below the confidence threshold the document stays unnamed on purpose. An
-    uncertain guess would route one CIC report's debt group onto the wrong
-    subject; an unnamed document leaves the fact missing, which the rules report
-    honestly.
-    """
+    """Name the checklist item this file is, or leave it unnamed. """
 
     verdict = rule_classify_document(
         document.filename, document.content, document.declared_group
@@ -193,16 +157,7 @@ def _identify(document: PostcheckDocument, config: Any) -> None:
 
 
 def _more_specific_name_match(document: PostcheckDocument, verdict: dict) -> bool:
-    """True when the winner did not merely tie - it matched a longer name.
-
-    Three CIC reports score identically because one of them claims the short
-    keyword "thong tin cic", which is a substring of the other two. The
-    confidence formula reads that as a coin toss, since it only looks at the
-    score margin. But a keyword covering 29 characters of the filename against
-    one covering 13 is not a coin toss: it is the more specific match, and the
-    classifier's own tie-break already picked it. This says so out loud rather
-    than discarding a correct answer for looking uncertain.
-    """
+    """True when the winner did not merely tie - it matched a longer name. """
 
     scores = verdict.get("scores") or {}
     winner = verdict.get("document_type") or ""
@@ -272,27 +227,7 @@ def _query(facts: Facts, paths: tuple[str, ...], label: str, call, unpack) -> No
 
 
 def _match_list(facts: Facts, entries: list[dict], prefix: str, moment: str) -> dict[str, Any]:
-    """Match the company, its owner and its shareholders against one list.
-
-    Shared by BL/WL and AMC: the two are different lists with the same shape, and
-    a subject is in one if a tax code, a national ID, or - only when the entry
-    carries neither - a name matches. Name matching is the weakest of the three
-    and is the last resort precisely because a namesake is a false positive a
-    person has to overrule.
-
-    `False` is a real answer: the list was read and this subject is not in it -
-    including when the list came back empty, which the business has decided means
-    nobody is listed rather than a lookup that did not run.
-
-    `None` is returned for a subject LOS gave us nothing to match on - with no
-    identifier at all, "not in the list" would be a conclusion drawn from nothing,
-    and `_query` turns the None into a marked-missing fact instead.
-
-    The shareholder result is a dict keyed by name rather than a list of hits: an
-    empty list would be indistinguishable from "no shareholder is listed", which
-    is the ordinary case and a real answer, while an empty dict correctly means
-    LOS recorded no shareholders.
-    """
+    """Match the company, its owner and its shareholders against one list. """
 
     def field(path: str) -> str:
         return str(facts.get(path)) if facts.has(path) else ""
@@ -392,14 +327,11 @@ def fetch_reference_data(
            lambda: _call(t24.get_outstanding),
            lambda row: {"t24.outstanding": row.get("outstanding")})
 
-    # CIC and BL/WL are the same lookup at two moments: the approval date and the
-    # review date. One tool each, called twice - a report in the dossier could
-    # only ever carry one of the two.
     for moment, as_of in (("approval", approval_date), ("postcheck", postcheck_date)):
         _query(facts,
                (f"cic.customer_debt_group_at_{moment}", f"cic.owner_debt_group_at_{moment}"),
                f"Truy vấn CIC tại thời điểm {as_of}",
-               lambda as_of=as_of: _call(cic.get_cic_debt_groups, as_of_date=as_of),
+               lambda as_of=as_of: _call(ics.get_cic_debt_groups, as_of_date=as_of),
                lambda row, moment=moment: {
                    f"cic.customer_debt_group_at_{moment}":
                        as_debt_group(row.get("customer"), settings),
@@ -409,7 +341,7 @@ def fetch_reference_data(
 
         _query(facts, (f"cic.shareholder_debt_groups_at_{moment}",),
                f"Truy vấn nhóm nợ cổ đông tại thời điểm {as_of}",
-               lambda as_of=as_of: cic.get_cic_shareholder_debt_groups.invoke({
+               lambda as_of=as_of: ics.get_cic_shareholder_debt_groups.invoke({
                    "shareholders": (facts.get("los.shareholders")
                                     if facts.has("los.shareholders") else []),
                    "as_of_date": as_of, "executor": executor}),
@@ -438,7 +370,7 @@ def fetch_reference_data(
            lambda items: {"portfolio.facilities": items})
 
     _query(facts, ("cic.collateral_items",), "Truy vấn TSBĐ đăng ký tại CIC",
-           lambda: _call(cic.get_cic_collateral),
+           lambda: _call(ics.get_cic_collateral),
            lambda items: {"cic.collateral_items": items})
 
     _query(facts, ("virac.revenue_by_year", "virac.net_profit_by_year"),
@@ -508,12 +440,7 @@ def _block_value(document: PostcheckDocument, slot: str, block: str, key: str) -
 
 
 def as_debt_group(value: Any, settings: dict) -> Any:
-    """A debt group as the rules want it: an integer 1-5.
-
-    The view may return the number or the printed Vietnamese label, so both are
-    accepted. A label absent from `debt_group_by_label` returns None, which the
-    caller turns into a marked-missing fact - it is never guessed as group 1.
-    """
+    """A debt group as the rules want it: an integer 1-5. """
 
     if value is None:
         return None
@@ -526,14 +453,7 @@ def as_debt_group(value: Any, settings: dict) -> Any:
 
 
 def as_report_type(value: Any, settings: dict) -> Any:
-    """What KIND of financial report this is, as one of the configured names.
-
-    Both sides of V09 print their own wording - the RM types one thing into LOS,
-    the statement's own form name says another - so both come through here and
-    land on the same vocabulary. A wording the table does not know returns None,
-    which the caller turns into a marked-missing fact: the alternative is two
-    strings that differ for no reason anybody can act on.
-    """
+    """What KIND of financial report this is, as one of the configured names. """
 
     if not value:
         return None
@@ -587,16 +507,7 @@ def assemble_document_facts(
 def _assemble_photo_evidence(
     facts: Facts, documents: list[PostcheckDocument]
 ) -> None:
-    """What the vision pass saw in each site-visit photograph (V10).
-
-    Collected from every photo document, so one unreadable file does not hide
-    what the others showed. No photos at all leaves the fact missing; whether
-    that is a problem is P02's question, decided from the LOS site-visit flag.
-    """
-
-    # LOS said no field visit is needed, so "no photo evidence" is the correct
-    # and complete answer - not a gap. Recorded as an empty finding rather than
-    # marked missing, so V10 can pass instead of reading as unchecked.
+    """What the vision pass saw in each site-visit photograph (V10). """
     if facts.has("los.is_site_visit") and not facts.get("los.is_site_visit"):
         facts.set_empty(
             "doc.sitevisit_photo_evidence",
@@ -628,17 +539,7 @@ def _assemble_photo_evidence(
 
 
 def _assemble_signature(facts: Facts, documents: list[PostcheckDocument]) -> None:
-    """P05: do the financial statements carry a digital signature.
-
-    Selected by DOCUMENT TYPE, not by whether extraction read the figures: the
-    signature is a property of the file, and a statement the model failed to
-    parse is still signed or unsigned. Tying this to the extraction result would
-    have made an LLM outage look like an unsigned filing.
-
-    One signed statement is enough. All of them unsigned is a real answer. A
-    dossier whose statements are all in formats the detector cannot judge - a
-    .docx, an .xlsx - leaves the fact MISSING rather than claiming unsigned.
-    """
+    """P05: do the financial statements carry a digital signature. """
 
     statements = [document for document in documents
                   if document.document_type
@@ -663,35 +564,7 @@ def _assemble_signature(facts: Facts, documents: list[PostcheckDocument]) -> Non
 def _assemble_financials(
     facts: Facts, documents: list[PostcheckDocument], settings: dict
 ) -> None:
-    """Pull the figures the rules need out of every statement in the dossier.
-
-    A dossier may carry several statements: the current year as a scan and the
-    prior year as an e-tax filing, or one period in both formats at once. Two
-    consequences, and neither is decided here by hand.
-
-    WHICH FIGURE WINS is FinancialRatioCalculator's answer, not ours. It merges
-    by (period, metric) and ranks candidates by (source, tier, score), and its
-    SOURCE_RANK puts "xml" above "llm" - a figure read exactly out of a tax
-    filing beats the same figure guessed from a scan. All this function owes it
-    is the source marker, which it used to withhold by passing "". Setting it is
-    the whole of "the filing wins for that period".
-
-    WHICH PERIOD IS THE REPORT is the latest period found anywhere in the
-    dossier. It used to be resolve_report_years(statements[0]) - the period of
-    whichever file sorted first by name, which is to say the alphabet decided
-    what rule P07 was checking.
-
-    Metric matching is likewise FinancialRatioCalculator's: statement code
-    first, then accent-stripped alias, with an exclude list. Note that the
-    e-tax path deliberately leaves the code empty, because the B01a-DNN form
-    numbers its indicators differently from the TT200 scheme those codes belong
-    to; the alias match is the correct route there.
-
-    "Latest period" assumes annual statements. A quarterly filing collapses onto
-    the same year label as the annual one for that year, and the two would then
-    compete. The BRD only ever speaks of annual statements, so that is left
-    alone rather than half-handled.
-    """
+    """Pull the figures the rules need out of every statement in the dossier. """
 
     statements = [d for d in documents if isinstance(d.financial_statement, dict)]
     reason = (
@@ -732,10 +605,6 @@ def _assemble_financials(
     current, prior = years[-1], (years[-2] if len(years) > 1 else None)
     facts.set("doc.financials.report_year", current)
 
-    # V09 compares the KIND of report, and the statements name their own kind
-    # differently on each path - the e-tax filing gives its form name, the model
-    # gives its three-way vocabulary. Both land on the configured names or on
-    # nothing; an audited statement says so on its own and outranks the form name.
     kinds = []
     for document in statements:
         payload = document.financial_statement
@@ -803,16 +672,7 @@ def run_postcheck(
     approval_date: str,
     postcheck_date: str,
 ) -> PostcheckResult:
-    """Review ONE credit application, from its upload folder to a Markdown report.
-
-    The report comes back finished, commentary included. It used to come back
-    without it, and the caller rendered a second time to add it - so the report
-    this function returned was never the one anybody read.
-
-    This is the one place the pipeline spends on an LLM beyond extraction: with
-    `config.commentary_llm` set, the two commentary paragraphs cost one call
-    each. With it None, nothing is called and the report says so.
-    """
+    """Review ONE credit application, from its upload folder to a Markdown report. """
 
     settings = get_settings()
 
@@ -822,9 +682,6 @@ def run_postcheck(
     facts = Facts()
     facts.set("case.postcheck_date", postcheck_date,
               reason="chưa truyền ngày rà soát vào run_postcheck")
-    # Systems BEFORE documents: _assemble_photo_evidence has to know whether LOS
-    # asked for a site visit at all, and nothing in the document assembly reads a
-    # system fact - so this order costs nothing and buys that one answer.
     fetch_reference_data(facts, tax_code, config, approval_date, postcheck_date,
                          settings)
     assemble_document_facts(facts, documents, settings)

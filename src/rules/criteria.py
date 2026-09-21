@@ -10,14 +10,10 @@ what id, title and severity, and on which facts, is in src/rules/registry.py -
 one catalogue for all of them, so there is one place to look.
 """
 
-from __future__ import annotations
-
 from src.facts import Facts
 from src.rules.engine import Verdict, failed, passed
 
 
-# Who is measured against which threshold. The business owner (BO, written CDN
-# in the BRD's Vietnamese) carries a limit of their own.
 DEBT_GROUP_LIMITS: tuple[tuple[str, str, str], ...] = (
     ("KH", "cic.customer_debt_group_at_approval", "max_cic_group"),
     ("CDN", "cic.owner_debt_group_at_approval", "BO_max_cic_group"),

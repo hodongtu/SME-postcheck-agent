@@ -1,8 +1,4 @@
-"""Virac - the only third-party data source in the system (BRD 2.4).
-
-Everything else post-check queries is the bank's own: LOS for what was
-approved, BCDE for what the appraisal officer filed, T24 for what was booked.
-"""
+"""Virac - the only third-party data source in the system (BRD 2.4). """
 
 from __future__ import annotations
 

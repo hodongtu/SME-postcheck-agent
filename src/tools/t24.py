@@ -1,11 +1,4 @@
-"""T24 - the core banking system.
-
-Everything the bank itself recorded: the limits it booked, the collateral it
-holds, the customer's outstanding obligations, and their account activity.
-"""
-
-from __future__ import annotations
-
+"""T24 - the core banking system. """
 from typing import Annotated, Any
 
 from langchain_core.tools import InjectedToolArg, tool
@@ -20,8 +13,6 @@ WHERE   mst = :tax_code
 ORDER   BY ngay_hach_toan
 """
 
-# Aliased in the SQL: the database column names stay where they belong, and
-# every collateral fact in the system is then read with the same English keys.
 COLLATERAL_SQL = """
 SELECT  loai   AS kind,
         gia_tri AS value
@@ -36,9 +27,6 @@ FROM    v_du_no
 WHERE   mst = :tax_code
 """
 
-# Account activity rolled up per period, over the window under review. Rows are
-# carried through as the view returns them: no criterion reads them yet, so
-# naming fields here would only invite one to be invented.
 TRANSACTION_SUMMARY_SQL = """
 SELECT  ky, ghi_no, ghi_co, so_du_binh_quan, so_luong_gd
 FROM    v_t24_giao_dich_tong_hop
@@ -66,8 +54,6 @@ def get_t24_facilities(
     return {
         "active_limit_by_product": {r["san_pham"]: r["hmtd_active"] for r in facilities},
         "active_limit": sum(r.get("hmtd_active") or 0 for r in facilities),
-        # Earliest booking date: the reference point for the approval validity
-        # check (O01) and for which financial year the statements must cover (P07).
         "booking_date": min(r["ngay_hach_toan"] for r in facilities),
         "ccr": facilities[0].get("ccr"),
     }
@@ -88,12 +74,7 @@ def get_outstanding(
     tax_code: Annotated[str, InjectedToolArg],
     executor: Annotated[Any, InjectedToolArg],
 ) -> dict:
-    """Total outstanding obligation at TCB (BRD row 10).
-
-    Collected and printed, not yet graded: the criterion comparing it against the
-    customer's cash flow is still to be defined. See DISPLAY_ONLY_FACTS in
-    src/facts.py.
-    """
+    """Total outstanding obligation at TCB (BRD row 10). """
 
     row = one_row(executor, OUTSTANDING_SQL, {"tax_code": tax_code})
     return {"outstanding": row.get("du_no")} if row else {}
@@ -106,12 +87,7 @@ def get_transaction_summary(
     to_date: Annotated[str, InjectedToolArg],
     executor: Annotated[Any, InjectedToolArg],
 ) -> list[dict]:
-    """The customer's account activity per period, approval date to review date.
-
-    Collected and printed, not graded: declared in DISPLAY_ONLY_FACTS
-    (src/facts.py). The graded half of BRD 2.4's cash-flow row is E06, which
-    counts overdue LDs - this is the context a reviewer reads beside it.
-    """
+    """The customer's account activity per period, approval date to review date. """
 
     return rows(executor, TRANSACTION_SUMMARY_SQL,
                 {"tax_code": tax_code, "from_date": from_date, "to_date": to_date})
@@ -124,11 +100,7 @@ def get_cashflow_pdld(
     to_date: Annotated[str, InjectedToolArg],
     executor: Annotated[Any, InjectedToolArg],
 ) -> dict:
-    """How many LDs fell overdue (PDLD - Payment due LD) over the period under review.
-
-    The window is approval date to post-check date. The view and column names
-    below are placeholders until the real T24 objects are confirmed.
-    """
+    """How many LDs fell overdue (PDLD - Payment due LD) over the period under review. """
 
     row = one_row(executor, CASHFLOW_PDLD_SQL,
                   {"tax_code": tax_code, "from_date": from_date, "to_date": to_date})

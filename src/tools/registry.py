@@ -1,8 +1,4 @@
-"""Every query tool the pipeline calls, checked at import time.
-
-A tool listed here must be invoked by src/pipeline.py - `verify_tools_are_used`
-asserts that, so the registry cannot claim a connection that does not exist.
-"""
+"""Every query tool the pipeline calls, checked at import time. """
 
 from __future__ import annotations
 
@@ -15,7 +11,7 @@ from src.tools.los import (
     get_los_sitevisit_online,
 )
 from src.tools.blwl import get_blacklist_watchlist
-from src.tools.cic import (
+from src.tools.ics import (
     get_cic_collateral,
     get_cic_debt_groups,
     get_cic_shareholder_debt_groups,

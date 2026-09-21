@@ -1,18 +1,4 @@
-"""The fact sheet: the single boundary between collection and rule checking.
-
-Everything to the left of this module may be slow and may fail - OCR, LLM
-passes, SQL. Everything to the right is a pure function over `Facts`, which is
-why the whole rule suite is testable offline from a JSON fixture.
-
-A fact is either present or MISSING. There is no third state and no implicit
-default: a rule that needs a fact nobody collected must not run at all.
-
-Keys and identifiers are English. Descriptions and reason strings are
-Vietnamese because they are printed verbatim into the report the reviewer
-reads.
-"""
-
-from __future__ import annotations
+"""The fact sheet: the single boundary between collection and rule checking. """
 
 import json
 from typing import Any, Iterable, NamedTuple
@@ -290,18 +276,7 @@ class Facts:
         self._reasons.pop(path, None)
 
     def set_empty(self, path: str, note: str) -> None:
-        """Record that a collection is legitimately EMPTY - an answer, not a gap.
-
-        `set` treats an empty list as absent, and that default is right almost
-        everywhere: "no documents carried a name" is a gap, not a finding. But
-        occasionally emptiness IS the answer - no site-visit photographs, because
-        LOS says this file needs no site visit - and a rule must be able to read
-        that instead of stopping at insufficient data.
-
-        Use it only where the emptiness has been REASONED to, never where a
-        collector simply came back with nothing. `note` says which reasoning, and
-        is kept so the appendix can explain an empty row.
-        """
+        """Record that a collection is legitimately EMPTY - an answer, not a gap. """
 
         if path not in FACT_KEYS:
             raise UnknownFactError(f"'{path}' is not declared in FACT_KEYS (src/facts.py).")
