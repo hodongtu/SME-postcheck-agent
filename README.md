@@ -100,10 +100,27 @@ cả phần truy vấn, trên SQLite dựng tại chỗ.
                     15 tool truy vấn SQL
 ```
 
-Tám node trong một đồ thị LangGraph tuyến tính, khai ở
-[src/graph.py](src/graph.py); `run_postcheck` chỉ nạp state vào và bóc kết quả
-ra. Không có nhánh — giá trị không nằm ở định tuyến mà ở chỗ **thứ tự các bước
-được khai báo** thay vì ngầm định bởi thứ tự câu lệnh trong một hàm.
+Bảy node LangGraph trong [src/graph.py](src/graph.py), cùng khuôn với
+`supervisor.py` bên CreditMemo: một class `PostcheckSupervisor` giữ config, dựng
+đồ thị một lần trong `__init__`, và mỗi bước là một method `_graph_*` nhận state
+rồi trả state. `run_postcheck` chỉ khởi động nó và đóng gói kết quả.
+
+Một nhánh thật: **nhận định**. Không cấu hình `commentary_llm` thì đi thẳng sang
+kết xuất, thay vì gọi một node để nhận về rỗng và ghi vào nhật ký như thể đã làm
+việc gì.
+
+Mỗi node ghi một dòng vào `result.steps`, nên một lượt chạy tự kể lại nó đã làm
+gì:
+
+```
+1. Đọc 12 tài liệu, 5 chưa đọc được nội dung
+2. Trích xuất: 0 lượt gọi mô hình
+3. Truy vấn hệ thống: 55 fact có giá trị
+4. Lắp fact từ chứng từ: thêm 12 fact
+5. Chấm 40 tiêu chí: 30 đạt, 0 không đạt, 10 thiếu dữ liệu
+6. Bỏ qua nhận định: chưa cấu hình commentary_llm
+7. Kết xuất báo cáo: 13940 ký tự
+```
 
 Hai cạnh mang phụ thuộc **hỏng im lặng** nếu đảo: `collect_reference_data` phải
 chạy trước `assemble_document_facts` (bộ thu thập ảnh đọc `los.is_site_visit` để

@@ -1,146 +1,240 @@
-"""The post-check run as a LangGraph state machine.
+"""The post-check workflow as a LangGraph state machine.
 
-Seven nodes, one edge each, no branching. The value is not routing - it is that
-the steps and the order between them are declared in one place instead of being
-implied by the order of statements inside a function.
+Same shape as SME_creditmemo's src/agents/supervisor.py: a class holds the
+config, builds the graph once, and each step is a `_graph_*` method that takes
+the state and returns it. The order of the steps is declared in one place
+instead of being implied by the order of statements inside a function.
 
-Two orderings here are load-bearing and easy to break by accident:
+Two edges carry a dependency that does NOT raise when reversed:
 
   collect_reference_data BEFORE assemble_document_facts
-      the photo collector reads los.is_site_visit, and the checklist rule reads
-      it too; run the other way round and both go missing.
+      the photo collector reads los.is_site_visit to decide whether "no
+      photographs" is an answer or a gap.
 
   mark_manual_facts AFTER both collectors
-      it marks what nobody filled, so it has to run when everyone has finished.
+      it marks what nobody filled, so everyone has to have finished.
 
-`build_postcheck_graph().get_graph().draw_mermaid()` prints the diagram from the
-graph itself, so a picture of the flow cannot drift from the flow.
+One real branch: commentary. With no model wired the run goes straight to
+render, and the report says so rather than carrying two empty sections.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import END, StateGraph
 
 from src.facts import MISSING, Facts
 from src.passes import run_extraction_passes
 from src.report.commentary import build_commentary
 from src.report.render import render_report
-from src.rules.engine import Finding, run_rules, summarise
+from src.rules.engine import run_rules, summarise
 from src.rules.registry import RULES
-from src.types import PostcheckDocument
+from src.settings import get_settings
+from src.types import PostcheckGraphState
 
-
-class PostcheckState(TypedDict, total=False):
-    """Everything a node may read or write."""
-
-    case_dir: str
-    tax_code: str
-    approval_date: str
-    postcheck_date: str
-    config: Any
-    settings: dict
-
-    documents: list[PostcheckDocument]
-    extraction_calls: dict[str, int]
-    facts: Facts
-    findings: list[Finding]
-    commentary: dict[str, str]
-    report_markdown: str
-    counts: dict[str, int]
-
-
-def _read_documents(state: PostcheckState) -> dict:
-    from src.pipeline import read_case_documents
-
-    return {"documents": read_case_documents(Path(state["case_dir"]), state["config"])}
-
-
-def _extract(state: PostcheckState) -> dict:
-    return {"extraction_calls": run_extraction_passes(
-        state["documents"], state["config"], state["settings"]
-    )}
-
-
-def _start_facts(state: PostcheckState) -> dict:
-    facts = Facts()
-    facts.set("case.postcheck_date", state["postcheck_date"],
-              reason="chưa truyền ngày rà soát vào run_postcheck")
-    return {"facts": facts}
-
-
-def _collect_reference_data(state: PostcheckState) -> dict:
-    from src.pipeline import fetch_reference_data
-
-    fetch_reference_data(state["facts"], state["tax_code"], state["config"],
-                         state["approval_date"], state["postcheck_date"],
-                         state["settings"])
-    return {}
-
-
-def _assemble_document_facts(state: PostcheckState) -> dict:
-    from src.pipeline import assemble_document_facts
-
-    assemble_document_facts(state["facts"], state["documents"], state["settings"])
-    state["facts"].mark_manual_facts_missing()
-    return {}
-
-
-def _grade(state: PostcheckState) -> dict:
-    findings = run_rules(RULES, state["facts"], state["settings"])
-    return {"findings": findings, "counts": summarise(findings)}
-
-
-def _narrate(state: PostcheckState) -> dict:
-    config = state["config"]
-    return {"commentary": (
-        build_commentary(state["findings"], config.commentary_llm)
-        if config.enable_commentary else {}
-    )}
-
-
-def _render(state: PostcheckState) -> dict:
-    facts = state["facts"]
-
-    def or_dash(path: str, fallback: str = "—") -> str:
-        value = facts.get(path)
-        return str(value) if value is not MISSING else fallback
-
-    meta = {
-        "customer_name": or_dash("los.customer_name"),
-        "tax_code": or_dash("los.tax_code", state["tax_code"]),
-        "program": or_dash("los.program"),
-        "postcheck_date": state["postcheck_date"],
-    }
-    return {"report_markdown": render_report(
-        state["findings"], meta, state["commentary"], facts=facts
-    )}
-
-
-NODES = (
-    ("read_documents", _read_documents),
-    ("extract", _extract),
-    ("start_facts", _start_facts),
-    ("collect_reference_data", _collect_reference_data),
-    ("assemble_document_facts", _assemble_document_facts),
-    ("grade", _grade),
-    ("narrate", _narrate),
-    ("render", _render),
+# The order the workflow contracts to. Read by testing/checks/verify_graph.py,
+# which builds a reordered copy and shows the order is load-bearing.
+NODE_ORDER: tuple[str, ...] = (
+    "read_documents",
+    "extract_documents",
+    "collect_reference_data",
+    "assemble_document_facts",
+    "grade_criteria",
+    "write_commentary",
+    "render_report",
 )
 
 
-def build_postcheck_graph() -> Any:
-    """The compiled graph. One linear path; the order is the contract."""
+class PostcheckSupervisor:
+    """Runs one post-check review."""
 
-    builder = StateGraph(PostcheckState)
-    for name, function in NODES:
-        builder.add_node(name, function)
+    def __init__(self, config: Any):
+        self.config = config
+        self.settings = get_settings()
+        self.workflow_graph = self._build_workflow_graph()
 
-    builder.add_edge(START, NODES[0][0])
-    for (earlier, _), (later, _) in zip(NODES, NODES[1:]):
-        builder.add_edge(earlier, later)
-    builder.add_edge(NODES[-1][0], END)
+    def _build_workflow_graph(self):
+        """Build the deterministic LangGraph post-check workflow."""
 
-    return builder.compile()
+        workflow = StateGraph(PostcheckGraphState)
+        workflow.add_node("read_documents", self._graph_read_documents)
+        workflow.add_node("extract_documents", self._graph_extract_documents)
+        workflow.add_node("collect_reference_data", self._graph_collect_reference_data)
+        workflow.add_node("assemble_document_facts", self._graph_assemble_document_facts)
+        workflow.add_node("grade_criteria", self._graph_grade_criteria)
+        workflow.add_node("write_commentary", self._graph_write_commentary)
+        workflow.add_node("render_report", self._graph_render_report)
+
+        workflow.set_entry_point("read_documents")
+        workflow.add_edge("read_documents", "extract_documents")
+        workflow.add_edge("extract_documents", "collect_reference_data")
+        workflow.add_edge("collect_reference_data", "assemble_document_facts")
+        workflow.add_edge("assemble_document_facts", "grade_criteria")
+        workflow.add_conditional_edges(
+            "grade_criteria",
+            self._graph_commentary_wanted,
+            {"skip": "render_report", "write": "write_commentary"},
+        )
+        workflow.add_edge("write_commentary", "render_report")
+        workflow.add_edge("render_report", END)
+
+        return workflow.compile()
+
+    # ── Graph nodes, in the order the workflow runs them ──────────────────
+
+    def _graph_read_documents(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """Read every file in the case folder, whatever its format."""
+
+        from src.pipeline import read_case_documents
+
+        documents = read_case_documents(Path(state["case_dir"]), self.config)
+        unreadable = sum(1 for d in documents if d.extraction_status != "success")
+        steps = state.get("steps", [])
+        steps.append(
+            f"Đọc {len(documents)} tài liệu"
+            + (f", {unreadable} chưa đọc được nội dung" if unreadable else "")
+        )
+        return {**state, "documents": documents, "steps": steps}
+
+    def _graph_extract_documents(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """Run each extraction pass over the documents it applies to."""
+
+        calls = run_extraction_passes(state["documents"], self.config, self.settings)
+        spent = sum(calls.values())
+        steps = state.get("steps", [])
+        steps.append(
+            f"Trích xuất: {spent} lượt gọi mô hình"
+            + (f" ({', '.join(f'{k} {v}' for k, v in calls.items() if v)})" if spent else "")
+        )
+        return {**state, "extraction_calls": calls, "steps": steps}
+
+    def _graph_collect_reference_data(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """Query every system. Runs BEFORE the dossier facts - see module docstring."""
+
+        from src.pipeline import fetch_reference_data
+
+        facts = Facts()
+        facts.set("case.postcheck_date", state["postcheck_date"],
+                  reason="chưa truyền ngày rà soát vào run_postcheck")
+        fetch_reference_data(facts, state["tax_code"], self.config,
+                             state["approval_date"], state["postcheck_date"],
+                             self.settings)
+        collected = len(facts.collected())
+        steps = state.get("steps", [])
+        steps.append(f"Truy vấn hệ thống: {collected} fact có giá trị")
+        return {**state, "facts": facts, "steps": steps}
+
+    def _graph_assemble_document_facts(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """Read the dossier into facts, then mark what nobody collected."""
+
+        from src.pipeline import assemble_document_facts
+
+        facts = state["facts"]
+        before = len(facts.collected())
+        assemble_document_facts(facts, state["documents"], self.settings)
+        facts.mark_manual_facts_missing()
+        steps = state.get("steps", [])
+        steps.append(
+            f"Lắp fact từ chứng từ: thêm {len(facts.collected()) - before} fact"
+        )
+        return {**state, "steps": steps}
+
+    def _graph_grade_criteria(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """Grade every rule. Pure Python over the facts - no model, no network."""
+
+        findings = run_rules(RULES, state["facts"], self.settings)
+        counts = summarise(findings)
+        steps = state.get("steps", [])
+        steps.append(
+            f"Chấm {counts['TOTAL']} tiêu chí: {counts['PASS']} đạt, "
+            f"{counts['FAIL']} không đạt, {counts['INSUFFICIENT_DATA']} thiếu dữ liệu"
+        )
+        return {**state, "findings": findings, "counts": counts, "steps": steps}
+
+    @staticmethod
+    def _graph_commentary_wanted(state: PostcheckGraphState) -> str:
+        """Whether this run writes the two commentary paragraphs.
+
+        Decided in `run`, from the flag AND whether a model is wired: with no
+        model the node would call build_commentary only to be handed {} back, and
+        the step log would report writing nothing as if it were work done.
+        """
+
+        return "write" if state.get("commentary_enabled") else "skip"
+
+    def _graph_write_commentary(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """The only model call outside extraction: the two BRD commentary sections."""
+
+        commentary = build_commentary(state["findings"], self.config.commentary_llm)
+        steps = state.get("steps", [])
+        steps.append(f"Viết nhận định cho {len(commentary)} mục")
+        return {**state, "commentary": commentary, "steps": steps}
+
+    def _graph_render_report(
+        self, state: PostcheckGraphState
+    ) -> PostcheckGraphState:
+        """Fill the report template from the findings."""
+
+        facts = state["facts"]
+
+        def or_dash(path: str, fallback: str = "—") -> str:
+            value = facts.get(path)
+            return str(value) if value is not MISSING else fallback
+
+        meta = {
+            "customer_name": or_dash("los.customer_name"),
+            "tax_code": or_dash("los.tax_code", state["tax_code"]),
+            "program": or_dash("los.program"),
+            "postcheck_date": state["postcheck_date"],
+        }
+        report = render_report(state["findings"], meta,
+                               state.get("commentary") or {}, facts=facts)
+        steps = state.get("steps", [])
+        if not state.get("commentary"):
+            steps.append("Bỏ qua nhận định: chưa cấu hình commentary_llm")
+        steps.append(f"Kết xuất báo cáo: {len(report)} ký tự")
+        return {**state, "report_markdown": report, "steps": steps}
+
+    # ── Entry point ───────────────────────────────────────────────────────
+
+    def run(
+        self,
+        case_dir: str | Path,
+        tax_code: str,
+        approval_date: str,
+        postcheck_date: str,
+    ) -> dict:
+        """Invoke the graph and hand back its final state."""
+
+        return self.workflow_graph.invoke({
+            "case_dir": str(case_dir),
+            "tax_code": tax_code,
+            "approval_date": approval_date,
+            "postcheck_date": postcheck_date,
+            "steps": [],
+            "commentary_enabled": bool(
+                self.config.enable_commentary and self.config.commentary_llm
+            ),
+        })
+
+
+def build_postcheck_graph(config: Any = None):
+    """The compiled graph on its own, for drawing it or inspecting its shape."""
+
+    from src.config import Config
+
+    return PostcheckSupervisor(config or Config()).workflow_graph

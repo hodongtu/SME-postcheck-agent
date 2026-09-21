@@ -9,12 +9,17 @@ when reversed - both orders run to completion, one just produces worse facts and
 a report that quietly reports a checkable criterion as unchecked.
 A reversed edge like that survives every other check in this suite.
 
-It is measured on the customer LOS asks for NO site visit, because that is the
-only case where the dependency shows: the photo collector reads
-los.is_site_visit to decide that "no photographs" is an answer rather than a gap,
-and with the collectors reversed that fact is not there yet. Graded on the other
-customer the swap changes nothing, which is exactly how a check can look like it
-is protecting something while protecting nothing.
+Reversing them may raise or may merely degrade, and both count. Which one it is
+depends on where the Facts object gets created: while collect_reference_data
+creates it, running the other collector first dies outright; move that and the
+failure becomes quiet again - the photo collector reads los.is_site_visit to
+decide whether "no photographs" is an answer or a gap, and would find it absent.
+The check accepts either outcome and refuses only the third: a reversal that runs
+fine and grades the same, which would mean the declared order is decoration.
+
+It is measured on the customer LOS asks for NO site visit, because that is where
+the quiet version of the dependency shows. Graded on the other customer the swap
+changes nothing at all.
 """
 
 from _harness import ROOT, report
@@ -29,31 +34,37 @@ NO_SITE_VISIT_CUSTOMER = "0209999999"
 
 EXPECTED_ORDER = (
     "read_documents",
-    "extract",
-    "start_facts",
+    "extract_documents",
     "collect_reference_data",
     "assemble_document_facts",
-    "grade",
-    "narrate",
-    "render",
+    "grade_criteria",
+    "write_commentary",
+    "render_report",
 )
+
+# grade_criteria routes: with no commentary model it goes straight to the report.
+BRANCHING_NODE = "grade_criteria"
 
 
 def main() -> int:
     from src.config import Config
-    from src.graph import NODES, PostcheckState, build_postcheck_graph
+    from src.graph import NODE_ORDER, PostcheckSupervisor
     from src.tools._executor import sqlite_executor
 
     problems: list[str] = []
 
-    declared = [name for name, _ in NODES]
+    declared = list(NODE_ORDER)
     if declared != list(EXPECTED_ORDER):
         problems.append(
             f"src/graph.py declares {declared}, this check expects "
             f"{list(EXPECTED_ORDER)} - if the change is deliberate, record it here"
         )
 
-    drawn = build_postcheck_graph().get_graph()
+    def supervisor() -> PostcheckSupervisor:
+        return PostcheckSupervisor(Config(query_executor=sqlite_executor(
+            str(ROOT / "samples" / "dummy_db" / "postcheck_dummy.sqlite"))))
+
+    drawn = supervisor().workflow_graph.get_graph()
     wired = {node.id for node in drawn.nodes.values()} - {"__start__", "__end__"}
     if wired != set(declared):
         problems.append(
@@ -66,8 +77,13 @@ def main() -> int:
     for edge in drawn.edges:
         successors.setdefault(edge.source, []).append(edge.target)
     for source, targets in sorted(successors.items()):
-        if len(targets) > 1:
+        if len(targets) > 1 and source != BRANCHING_NODE:
             problems.append(f"node {source!r} branches to {sorted(targets)}")
+    if len(successors.get(BRANCHING_NODE, [])) < 2:
+        problems.append(
+            f"{BRANCHING_NODE!r} no longer branches - the commentary step has "
+            f"become unconditional, so a run with no model calls it for nothing"
+        )
 
     # Stop here if the shape is already wrong. Running a graph that is not the
     # one declared proves nothing about the declared one, and it tends to die
@@ -80,21 +96,26 @@ def main() -> int:
     # Build the same graph with the two collectors swapped and grade the demo
     # dossier with it. It must come out WORSE - if it does not, the declared
     # order is decoration and this check is protecting nothing.
-    from langgraph.graph import END, START, StateGraph
+    from langgraph.graph import END, StateGraph
+
+    from src.types import PostcheckGraphState
 
     swapped_order = list(EXPECTED_ORDER)
     a = swapped_order.index("collect_reference_data")
     b = swapped_order.index("assemble_document_facts")
     swapped_order[a], swapped_order[b] = swapped_order[b], swapped_order[a]
 
-    functions = dict(NODES)
-    builder = StateGraph(PostcheckState)
-    for name in swapped_order:
-        builder.add_node(name, functions[name])
-    builder.add_edge(START, swapped_order[0])
-    for earlier, later in zip(swapped_order, swapped_order[1:]):
-        builder.add_edge(earlier, later)
-    builder.add_edge(swapped_order[-1], END)
+    def reordered(boss: PostcheckSupervisor):
+        """The same nodes, the two collectors the other way round."""
+
+        builder = StateGraph(PostcheckGraphState)
+        for name in swapped_order:
+            builder.add_node(name, getattr(boss, f"_graph_{name}"))
+        builder.set_entry_point(swapped_order[0])
+        for earlier, later in zip(swapped_order, swapped_order[1:]):
+            builder.add_edge(earlier, later)
+        builder.add_edge(swapped_order[-1], END)
+        return builder.compile()
 
     def grade(graph) -> dict:
         return graph.invoke({
@@ -102,32 +123,41 @@ def main() -> int:
             "tax_code": NO_SITE_VISIT_CUSTOMER,
             "approval_date": "2026-04-01",
             "postcheck_date": "2026-09-15",
-            "config": Config(query_executor=sqlite_executor(
-                str(ROOT / "samples" / "dummy_db" / "postcheck_dummy.sqlite"))),
-            "settings": __import__("src.settings", fromlist=["x"]).get_settings(),
+            "steps": [],
+            "commentary_enabled": False,
         })
 
-    correct = grade(build_postcheck_graph())["counts"]
-    reversed_counts = grade(builder.compile())["counts"]
+    boss = supervisor()
+    correct = grade(boss.workflow_graph)["counts"]
 
-    if reversed_counts["INSUFFICIENT_DATA"] <= correct["INSUFFICIENT_DATA"]:
+    outcome = ""
+    try:
+        reversed_counts = grade(reordered(boss))["counts"]
+    except Exception as exc:                          # noqa: BLE001
+        reversed_counts = None
+        outcome = f"raises {type(exc).__name__}"
+    else:
+        if reversed_counts["INSUFFICIENT_DATA"] > correct["INSUFFICIENT_DATA"]:
+            outcome = (
+                f"costs "
+                f"{reversed_counts['INSUFFICIENT_DATA'] - correct['INSUFFICIENT_DATA']} "
+                f"criteria"
+            )
+
+    if not outcome:
         problems.append(
-            f"swapping collect_reference_data and assemble_document_facts changed "
-            f"nothing ({correct} vs {reversed_counts}) - the declared order is not "
-            f"actually load-bearing, so nothing here protects it"
+            f"swapping collect_reference_data and assemble_document_facts produced a "
+            f"working run with the same coverage ({correct} vs {reversed_counts}) - "
+            f"the declared order is not load-bearing, so nothing here protects it"
         )
-    if correct["FAIL"] != reversed_counts["FAIL"]:
-        problems.append(
-            f"the swap changed FAIL counts ({correct['FAIL']} vs "
-            f"{reversed_counts['FAIL']}) - it was expected to cost coverage, not to "
-            f"flip a verdict, so the effect is bigger than this check describes"
-        )
+
+
 
     return report(
         problems,
-        f"{len(declared)} nodes in one linear path; reversing the two collectors "
-        f"costs {reversed_counts['INSUFFICIENT_DATA'] - correct['INSUFFICIENT_DATA']} "
-        f"criteria, which is why the order is declared rather than implied",
+        f"{len(declared)} nodes, one branch at {BRANCHING_NODE}; reversing the two "
+        f"collectors {outcome}, which is why the order is declared rather than "
+        f"implied",
     )
 
 

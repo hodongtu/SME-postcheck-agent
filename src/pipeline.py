@@ -50,11 +50,13 @@ class PostcheckResult:
     report_markdown: str
     counts: dict[str, int]
     extraction_calls: dict[str, int] = field(default_factory=dict)
+    steps: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "counts": self.counts,
             "extraction_calls": self.extraction_calls,
+            "steps": self.steps,
             "findings": [asdict(finding) for finding in self.findings],
             "facts": self.facts.to_dict(),
             "documents": to_dict_list(self.documents),
@@ -674,21 +676,15 @@ def run_postcheck(
 ) -> PostcheckResult:
     """Review ONE credit application, from its upload folder to a Markdown report.
 
-    The steps run as a LangGraph state machine (src/graph.py); this function is
-    the entry point that feeds it and unpacks the result.
+    The steps run as a LangGraph workflow (src/graph.py). This is the entry point
+    that starts it and packs its final state into a result.
     """
 
-    from src.graph import build_postcheck_graph
+    from src.graph import PostcheckSupervisor
 
-    final = build_postcheck_graph().invoke({
-        "case_dir": str(case_dir),
-        "tax_code": tax_code,
-        "approval_date": approval_date,
-        "postcheck_date": postcheck_date,
-        "config": config,
-        "settings": get_settings(),
-    })
-
+    final = PostcheckSupervisor(config).run(
+        case_dir, tax_code, approval_date, postcheck_date
+    )
     return PostcheckResult(
         facts=final["facts"],
         findings=final["findings"],
@@ -696,4 +692,5 @@ def run_postcheck(
         report_markdown=final["report_markdown"],
         counts=final["counts"],
         extraction_calls=final["extraction_calls"],
+        steps=final["steps"],
     )
