@@ -264,7 +264,7 @@ Markdown, `{{Placeholder}}` — cùng bộ đọc `_split_frontmatter` bê từ
 |---|---|
 | Khung, tiêu đề, thứ tự mục | template |
 | Bảng tiêu chí, tổng hợp, phụ lục | Python, từ `Finding` |
-| Hai đoạn Nhận định (2.2 và 2.4) | LLM, theo hướng dẫn nằm cuối template |
+| Hai đoạn Nhận định (mục 1.2 và 1.4) | LLM, theo hướng dẫn nằm cuối template |
 
 Khác CreditMemo ở một điểm có chủ ý: bên đó LLM điền cả skeleton, ở đây ô
 `Đạt`/`Không đạt` là đầu ra của 39 rule Python tất định (quyết định D2), nên

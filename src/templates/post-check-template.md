@@ -17,9 +17,9 @@ version: 1
 
 {{TongHop}}
 
-## 2. Rà soát tín dụng (Post-check)
+## 1. Rà soát tín dụng (Post-check)
 
-### 2.1. Xác thực thông tin
+### 1.1. Xác thực thông tin
 
 > Kiểm tra tính phù hợp các thông tin Hội sở trả ra về Khách hàng (bao gồm nhưng
 > không giới hạn: tên KH, mã số thuế, ngành nghề, thông tin chủ doanh nghiệp
@@ -29,45 +29,45 @@ version: 1
 > Nguồn: Database & Tài liệu upload
 
 <!-- rules: V01 V02 V03 V04 V05 V06 V07 V08 V09 V10 -->
-{{BangTieuChi:2.1}}
+{{BangTieuChi:1.1}}
 
-### 2.2. Nhận diện dấu hiệu nghi ngờ gian lận
+### 1.2. Nhận diện dấu hiệu nghi ngờ gian lận
 
 > - Kiểm tra tính logic, nhất quán giữa các thông tin khách hàng cung cấp.
 > - Kiểm tra tính xác thực của thông tin trên chứng từ do ĐVKD cung cấp theo
 >   hướng dẫn của Bộ phận QTRR gian lận.
 
 <!-- rules: F01 -->
-{{BangTieuChi:2.2}}
+{{BangTieuChi:1.2}}
 
 #### Nhận định
 
-{{NhanDinh:2.2}}
+{{NhanDinh:1.2}}
 
-### 2.3. Kiểm tra điều kiện chính sách
+### 1.3. Kiểm tra điều kiện chính sách
 
 #### a) Kiểm tra chứng từ có thỏa mãn danh mục hồ sơ theo quy định tại thời điểm cấp tín dụng
 
 > Nguồn: Database & Tài liệu upload
 
 <!-- rules: P01 P02 P03 P04 P05 P06 P07 -->
-{{BangTieuChi:2.3.a}}
+{{BangTieuChi:1.3.a}}
 
 #### b) Kiểm tra các tiêu chí ĐVKD đã đánh giá tại thời điểm cấp tín dụng có đáp ứng các điều kiện cấp tín dụng của TCB
 
 > Nguồn: Database & Tài liệu upload
 
 <!-- rules: C01 C02 C03 C04 C05 C06 -->
-{{BangTieuChi:2.3.b}}
+{{BangTieuChi:1.3.b}}
 
 #### c) Kiểm tra các tác nghiệp của ĐVKD đã thực hiện phù hợp với Quy trình cấp tín dụng
 
 > Nguồn: Database
 
 <!-- rules: O01 O02 O03 O04 -->
-{{BangTieuChi:2.3.c}}
+{{BangTieuChi:1.3.c}}
 
-### 2.4. Đánh giá Nhận diện sớm dấu hiệu rủi ro tín dụng
+### 1.4. Đánh giá Nhận diện sớm dấu hiệu rủi ro tín dụng
 
 > Nhận diện sớm dấu hiệu rủi ro tín dụng trên cơ sở ý kiến chuyên gia, căn cứ
 > theo các thông tin thu thập nội bộ và bên thứ ba cập nhật đến thời điểm rà
@@ -75,13 +75,13 @@ version: 1
 > dụng TCTD; (iii) Thông tin khác (nếu có).
 
 <!-- rules: E01 E02 E03 E04 E05 E06 E07 E08 -->
-{{BangTieuChi:2.4}}
+{{BangTieuChi:1.4}}
 
 #### Nhận định
 
-{{NhanDinh:2.4}}
+{{NhanDinh:1.4}}
 
-## 3. Tiêu chí bổ sung ngoài BRD
+## 2. Tiêu chí bổ sung ngoài BRD
 
 Những tiêu chí dưới đây không có trong BRD. Chúng dùng dữ liệu đã thu thập cho
 các bước trên nên gần như không phát sinh thêm chi phí.
@@ -121,7 +121,7 @@ KHÔNG ĐƯỢC
 - Bỏ qua các tiêu chí đang ở trạng thái "Thiếu dữ liệu": đó là việc chưa làm
   xong, không phải việc đã đạt. Nếu có, phải nói rõ.
 
-## 2.2
+## 1.2
 
 Trọng tâm: mức độ nhất quán của hồ sơ và những dấu hiệu bất thường máy đã bắt
 được.
@@ -134,7 +134,7 @@ Phải nêu, theo thứ tự:
    bất thường nằm ngoài phạm vi máy kiểm và cần cán bộ QTRR gian lận xem trực
    tiếp.
 
-## 2.4
+## 1.4
 
 Trọng tâm: rủi ro tín dụng nhìn thấy tại thời điểm rà soát, không phải tại thời
 điểm phê duyệt.

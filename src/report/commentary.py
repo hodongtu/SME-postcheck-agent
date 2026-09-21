@@ -94,7 +94,7 @@ def _describe(findings: list[Finding]) -> str:
 def build_commentary(
     findings: list[Finding],
     llm: Any,
-    sections: tuple[str, ...] = ("2.2", "2.4"),
+    sections: tuple[str, ...] = ("1.2", "1.4"),
 ) -> dict[str, str]:
     """One paragraph per section. With no LLM it returns empty, and the report
     still renders with a note in place of each paragraph."""

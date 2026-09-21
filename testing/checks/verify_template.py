@@ -21,7 +21,7 @@ import sys
 
 # Sections that carry a model-written commentary paragraph, and therefore must
 # also carry guidance for it.
-COMMENTARY_SECTIONS = ("2.2", "2.4")
+COMMENTARY_SECTIONS = ("1.2", "1.4")
 
 TEMPLATE_NAME = "post-check-template"
 
