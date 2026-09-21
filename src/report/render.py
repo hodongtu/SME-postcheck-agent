@@ -1,17 +1,6 @@
 """Findings -> Markdown, poured into src/templates/post-check-template.md. """
 
-from src.facts import (
-    CIC,
-    DOCUMENTS,
-    FACT_KEYS,
-    LISTS,
-    LOS,
-    PORTFOLIO,
-    T24,
-    VIRAC,
-    Facts,
-    db_facts,
-)
+from src.facts import FACT_KEYS, Facts, db_facts
 from src.report.templates import Template, get_template
 from src.rules.engine import Finding, summarise
 
@@ -22,39 +11,6 @@ STATUS_MARK = {"PASS": "Đạt", "FAIL": "**Không đạt**", "INSUFFICIENT_DATA
 
 EMPTY_TABLE = "_Không có tiêu chí nào trong mục này._"
 EMPTY_COMMENTARY = "_Chưa có nhận định cho mục này._"
-
-COLLECTION_ROWS: dict[str, tuple[tuple[str, str, tuple[str, ...]], ...]] = {
-    "1.1": (
-        ("Thông tin khách hàng và HMTD được PD trên hệ thống LOS", LOS,
-         ("los.customer_name", "los.tax_code", "los.address", "los.owner_",
-          "los.gso_code", "los.industry", "los.program", "los.approved_limit",
-          "los.batch_", "los.sto_revenue", "los.chief_accountant_name")),
-        ("Thông tin top 5 cổ đông góp vốn", LOS, ("los.shareholders",)),
-        ("Báo cáo thực địa online do RM nhập", DOCUMENTS, ("los.sitevisit_online.",)),
-        ("Báo cáo tài chính online do RM nhập", DOCUMENTS, ("los.financials_online.",)),
-        ("Thông tin/ hồ sơ KH cung cấp", DOCUMENTS,
-         ("doc.financials.", "doc.proposal.", "doc.customer_name_values",
-          "doc.tax_code_values", "doc.address_values", "doc.owner_name_values",
-          "doc.owner_id_number_values", "doc.owner_birth_year_values",
-          "doc.signature_and_seal", "doc.types_present", "doc.extensions",
-          "doc.industry_on_registration")),
-        ("Thông tin/ hồ sơ ĐVKD đánh giá", DOCUMENTS,
-         ("doc.industry_on_sitevisit",)),
-    ),
-    "1.2": (
-        ("CIC KH/Chủ doanh nghiệp", CIC, ("cic.",)),
-        ("BL/WL của Khách hàng/Chủ doanh nghiệp", LISTS, ("blwl.",)),
-        ("Luồng thu hồi nợ AMC (ngoài BRD)", LISTS, ("amc.",)),
-        ("Limit và dư nghĩa vụ tại TCB", T24,
-         ("t24.active_limit", "t24.outstanding")),
-        ("Tài sản đảm bảo", T24, ("collateral.",)),
-        ("Danh mục tín dụng tại TCB (ngoài BRD)", PORTFOLIO, ("portfolio.",)),
-        ("Giao dịch tài khoản theo kỳ", T24, ("t24.transactions_by_period",)),
-        ("Giao dịch dòng tiền: LD quá hạn (PDLD)", T24, ("cashflow.",)),
-        ("Thông tin bên thứ ba (Virac)", VIRAC, ("virac.",)),
-    ),
-}
-
 
 def _cell(text: str) -> str:
     """One Markdown table cell: collapse newlines, escape the column separator."""
@@ -115,32 +71,6 @@ def _summary(findings: list[Finding], facts: Facts | None = None) -> str:
     return "\n".join(lines)
 
 
-def _collection_status(prefixes: tuple[str, ...], facts: Facts | None) -> str:
-    """Whether the data a section-1 row stands for actually arrived."""
-
-    if not prefixes:
-        return "Chưa thu thập — không tiêu chí nào sử dụng dữ liệu này"
-    paths = [path for path in FACT_KEYS
-             if any(path == prefix or path.startswith(prefix) for prefix in prefixes)]
-    if not paths:
-        return "—"
-    if facts is None:
-        return f"{len(paths)} mục dữ liệu"
-    collected = [path for path in paths if facts.has(path)]
-    if len(collected) == len(paths):
-        return f"Đã thu thập {len(collected)}/{len(paths)}"
-    if not collected:
-        return f"Chưa thu thập — thiếu cả {len(paths)}/{len(paths)} mục"
-    return f"Thu thập một phần {len(collected)}/{len(paths)}"
-
-
-def _collection_table(part: str, facts: Facts | None) -> str:
-    lines = ["| Dữ liệu thu thập | Nguồn | Trạng thái |", "|---|---|---|"]
-    for label, source, prefixes in COLLECTION_ROWS[part]:
-        lines.append(f"| {_cell(label)} | {source} | {_collection_status(prefixes, facts)} |")
-    return "\n".join(lines)
-
-
 def _appendix(findings: list[Finding]) -> str:
     unchecked = [f for f in findings if f.status == "INSUFFICIENT_DATA"]
     if not unchecked:
@@ -186,8 +116,6 @@ def build_values(
             values[name] = _criteria_table(
                 [by_id[rule_id] for rule_id in rule_ids if rule_id in by_id]
             )
-        elif kind == "BangThuThap":
-            values[name] = _collection_table(section, facts)
         elif kind == "NhanDinh":
             values[name] = commentary.get(section, "").strip() or EMPTY_COMMENTARY
 

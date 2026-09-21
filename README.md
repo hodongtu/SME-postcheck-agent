@@ -333,11 +333,14 @@ Sáu fact đó khai tường minh trong `MANUAL_FACTS` (`src/facts.py`) kèm lý
 ra phụ lục báo cáo, và chặn sáu rule: **V04, V05, V06, V07, P04, P05**.
 `verify_manual_facts` chạy hai chiều để con số này không âm thầm trôi.
 
-Hai fact đi đường ngược lại: `t24.outstanding` (dư nợ) và `portfolio.facilities`
-(danh mục tín dụng tại TCB) được thu thập và in ở mục 1.2 nhưng **chưa rule nào
-chấm** — tiêu chí đối chiếu sẽ bổ sung sau. Chúng khai trong `DISPLAY_ONLY_FACTS`
-vì mặc định của `verify_needs_paths` là coi "fact không ai đọc" là lỗi, và mặc
-định đó nên giữ.
+**Bảy fact đi đường ngược lại**: được thu thập nhưng **không rule nào chấm** —
+dư nợ, danh mục tín dụng, giao dịch tài khoản, kế toán trưởng, và ba trường mà
+một rule đã thôi đọc. Chúng khai trong `DISPLAY_ONLY_FACTS` vì mặc định của
+`verify_needs_paths` là coi "fact không ai đọc" là lỗi, và mặc định đó nên giữ.
+
+Từ khi bỏ mục 1, chúng **cũng không còn được in ra báo cáo** — chỉ còn nằm trong
+`result.facts` và file JSON của lượt chạy. Mỗi fact như vậy vẫn tốn một câu truy
+vấn mỗi lượt rà soát, nên danh sách này đáng đọc lại mỗi khi nó dài ra.
 
 Riêng Portfolio là **nguồn thứ phát**: nó không giữ bản ghi gốc nào mà được team
 portfolio dựng lại từ LOS/T24/CIC. Hai hệ quả mà một hệ thống gốc không có — nó

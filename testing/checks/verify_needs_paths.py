@@ -72,20 +72,6 @@ def main() -> int:
                 f"category {category!r} is declared but no fact belongs to it"
             )
 
-    # The report's collection table names a category per row; it must be the one
-    # the row's own facts carry, or the source column says the wrong thing.
-    from src.report.render import COLLECTION_ROWS
-
-    for part, rows in COLLECTION_ROWS.items():
-        for label, declared, prefixes in rows:
-            covered = {spec.category for path, spec in FACT_KEYS.items()
-                       if any(path == p or path.startswith(p) for p in prefixes)}
-            if covered and covered != {declared}:
-                problems.append(
-                    f"report row {part} {label!r} is labelled {declared!r} but covers "
-                    f"facts from {sorted(covered)}"
-                )
-
     return report(
         problems,
         f"{len(used)}/{len(FACT_KEYS)} facts are declared and read across "

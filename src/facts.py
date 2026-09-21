@@ -202,11 +202,19 @@ MANUAL_FACTS: dict[str, str] = {
 }
 
 
-# Facts collected for the report's section 1.2 that NO rule grades yet. Declared
-# for the same reason as MANUAL_FACTS: `verify_needs_paths` otherwise reads "no
-# rule reads this" as a fact collected for nothing, which is exactly the right
-# default. Being in this dict makes it a decision instead, and the check asserts
-# the set both ways - a path here that a rule DOES read is also an error.
+# Facts collected but graded by NO rule. They no longer reach the report either:
+# the collection tables went when section 1 did, so these now surface only in
+# result.facts and in the JSON a run writes out.
+#
+# Declared for the same reason as MANUAL_FACTS: `verify_needs_paths` otherwise
+# reads "no rule reads this" as a fact collected for nothing, which is exactly
+# the right default. Being in this dict makes it a decision instead, and the
+# check asserts the set both ways - a path here that a rule DOES read is an error.
+#
+# Each of them is here for one of two reasons: the business asked for it and the
+# criterion that will read it is still to be defined, or a rule stopped reading it
+# and the data was kept rather than dropped. Neither is free - a query runs for
+# each one on every review - so this list is worth re-reading when it grows.
 DISPLAY_ONLY_FACTS: dict[str, str] = {
     "t24.outstanding": "dư nợ; tiêu chí so sánh với dòng tiền khách hàng sẽ bổ sung sau",
     "portfolio.facilities": "danh mục tín dụng; chưa có tiêu chí đối chiếu",

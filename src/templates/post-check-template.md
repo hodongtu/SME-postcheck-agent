@@ -17,16 +17,6 @@ version: 1
 
 {{TongHop}}
 
-## 1. Thu thập thông tin/ hồ sơ thực hiện rà soát
-
-### 1.1. Thu thập thông tin/ hồ sơ thực hiện tại thời điểm thẩm định – phê duyệt
-
-{{BangThuThap:1.1}}
-
-### 1.2. Thông tin thu thập nội bộ và bên thứ ba cập nhật đến thời điểm rà soát
-
-{{BangThuThap:1.2}}
-
 ## 2. Rà soát tín dụng (Post-check)
 
 ### 2.1. Xác thực thông tin
