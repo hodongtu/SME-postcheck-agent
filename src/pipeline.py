@@ -672,43 +672,28 @@ def run_postcheck(
     approval_date: str,
     postcheck_date: str,
 ) -> PostcheckResult:
-    """Review ONE credit application, from its upload folder to a Markdown report. """
+    """Review ONE credit application, from its upload folder to a Markdown report.
 
-    settings = get_settings()
+    The steps run as a LangGraph state machine (src/graph.py); this function is
+    the entry point that feeds it and unpacks the result.
+    """
 
-    documents = read_case_documents(Path(case_dir), config)
-    extraction_calls = run_extraction_passes(documents, config, settings)
+    from src.graph import build_postcheck_graph
 
-    facts = Facts()
-    facts.set("case.postcheck_date", postcheck_date,
-              reason="chưa truyền ngày rà soát vào run_postcheck")
-    fetch_reference_data(facts, tax_code, config, approval_date, postcheck_date,
-                         settings)
-    assemble_document_facts(facts, documents, settings)
-    facts.mark_manual_facts_missing()
-
-    findings = run_rules(RULES, facts, settings)
-
-    commentary = (
-        build_commentary(findings, config.commentary_llm)
-        if config.enable_commentary else {}
-    )
-
-    def _or_dash(path: str, fallback: str = "—") -> str:
-        value = facts.get(path)
-        return str(value) if value is not MISSING else fallback
-
-    meta = {
-        "customer_name": _or_dash("los.customer_name"),
-        "tax_code": _or_dash("los.tax_code", tax_code),
-        "program": _or_dash("los.program"),
+    final = build_postcheck_graph().invoke({
+        "case_dir": str(case_dir),
+        "tax_code": tax_code,
+        "approval_date": approval_date,
         "postcheck_date": postcheck_date,
-    }
+        "config": config,
+        "settings": get_settings(),
+    })
+
     return PostcheckResult(
-        facts=facts,
-        findings=findings,
-        documents=documents,
-        report_markdown=render_report(findings, meta, commentary, facts=facts),
-        counts=summarise(findings),
-        extraction_calls=extraction_calls,
+        facts=final["facts"],
+        findings=final["findings"],
+        documents=final["documents"],
+        report_markdown=final["report_markdown"],
+        counts=final["counts"],
+        extraction_calls=final["extraction_calls"],
     )

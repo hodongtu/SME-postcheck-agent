@@ -100,8 +100,26 @@ cả phần truy vấn, trên SQLite dựng tại chỗ.
                     15 tool truy vấn SQL
 ```
 
-Năm bước gọi tuần tự trong `src/pipeline.py`. Không LangGraph: credit memo cần
-graph vì có bốn nhánh agent, post-check chỉ có một đường chạy.
+Tám node trong một đồ thị LangGraph tuyến tính, khai ở
+[src/graph.py](src/graph.py); `run_postcheck` chỉ nạp state vào và bóc kết quả
+ra. Không có nhánh — giá trị không nằm ở định tuyến mà ở chỗ **thứ tự các bước
+được khai báo** thay vì ngầm định bởi thứ tự câu lệnh trong một hàm.
+
+Hai cạnh mang phụ thuộc **hỏng im lặng** nếu đảo: `collect_reference_data` phải
+chạy trước `assemble_document_facts` (bộ thu thập ảnh đọc `los.is_site_visit` để
+biết "không có ảnh" là câu trả lời hay là lỗ hổng), và `mark_manual_facts` phải
+chạy sau cả hai. Đảo lại thì cả hai thứ tự đều chạy trót lọt, chỉ là báo cáo
+lặng lẽ ghi "chưa kiểm được" cho một tiêu chí vốn kiểm được.
+
+`verify_graph` chốt điều đó bằng cách dựng đồ thị đảo và chấm lại: nếu đảo mà kết
+quả không xấu đi thì chính bài kiểm đó đang không bảo vệ gì.
+
+In sơ đồ từ chính đồ thị, không vẽ tay:
+
+```python
+from src.graph import build_postcheck_graph
+print(build_postcheck_graph().get_graph().draw_mermaid())
+```
 
 | Tầng | Ở đâu |
 |---|---|

@@ -7,8 +7,10 @@
 #     Debian: apt-get install libpango-1.0-0 libcairo2 libgdk-pixbuf2.0-0
 
 # --- LLM: bốn pass trích xuất và hai đoạn nhận định ---
-# Không có langgraph: pipeline post-check là năm hàm gọi tuần tự,
-# và một lần chạy là một hồ sơ.
+# langgraph: luồng post-check là một đồ thị tuyến tính 8 node. Không có nhánh,
+# nên giá trị không nằm ở định tuyến mà ở chỗ thứ tự các bước được KHAI BÁO ở
+# một nơi thay vì ngầm định bởi thứ tự câu lệnh trong một hàm.
+langgraph==1.2.6
 langchain==1.3.11
 langchain-core==1.4.8
 langchain-openai==1.3.2
