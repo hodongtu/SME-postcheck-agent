@@ -37,6 +37,7 @@ from src.tools import amc, los, blwl, ics, portfolio, t24, virac
 from src.types import PostcheckDocument, PostcheckGraphState, to_dict_list
 from src.rules._compare import norm_digits
 from src.utils.common import SUPPORTED_EXTENSIONS, normalize_text
+from src.utils.pii import IDENTIFIER, NAME, as_hash, vault_from_settings
 from src.utils.reading.digital_signature import has_digital_signature
 from src.utils.reading.extractors import extract_document_text
 
@@ -241,10 +242,13 @@ def _match_list(facts: Facts, entries: list[dict], prefix: str, moment: str) -> 
         return str(facts.get(path)) if facts.has(path) else ""
 
     def hit(subject_tax_code: str, subject_id: str, subject_name: str) -> bool:
+        # Tax code is not PII and arrives as digits. The name and the id number
+        # arrive HASHED, so they are compared as opaque strings: norm_digits on a
+        # hash keeps the digits and drops the letters, which matches the wrong rows.
         for entry in entries:
             entry_tax = norm_digits(entry.get("tax_code"))
-            entry_id = norm_digits(entry.get("id_number"))
-            entry_name = normalize_text(str(entry.get("name") or ""))
+            entry_id = as_hash(entry.get("id_number"), IDENTIFIER)
+            entry_name = as_hash(entry.get("name"), NAME)
             if subject_tax_code and entry_tax and subject_tax_code == entry_tax:
                 return True
             if subject_id and entry_id and subject_id == entry_id:
@@ -255,8 +259,8 @@ def _match_list(facts: Facts, entries: list[dict], prefix: str, moment: str) -> 
         return False
 
     tax_code = norm_digits(field("los.tax_code"))
-    owner_id = norm_digits(field("los.owner_id_number"))
-    owner_name = normalize_text(field("los.owner_name"))
+    owner_id = as_hash(field("los.owner_id_number"), IDENTIFIER)
+    owner_name = as_hash(field("los.owner_name"), NAME)
 
     shareholders: dict[str, bool] = {}
     for person in (facts.get("los.shareholders") if facts.has("los.shareholders") else []):
@@ -264,7 +268,7 @@ def _match_list(facts: Facts, entries: list[dict], prefix: str, moment: str) -> 
         if not name:
             continue
         shareholders[name] = hit(
-            "", norm_digits(person.get("id_number")), normalize_text(name)
+            "", as_hash(person.get("id_number"), IDENTIFIER), as_hash(name, NAME)
         )
 
     return {
@@ -541,7 +545,7 @@ def _assemble_photo_evidence(
         "doc.sitevisit_photo_evidence", evidence,
         reason=(
             "hồ sơ không có ảnh khảo sát thực địa" if not photos
-            else f"pass ảnh không đọc được {len(photos)} ảnh khảo sát trong hồ sơ"
+            else f"không đọc được {len(photos)} ảnh khảo sát trong hồ sơ"
         ),
     )
 
@@ -577,7 +581,7 @@ def _assemble_financials(
     statements = [d for d in documents if isinstance(d.financial_statement, dict)]
     reason = (
         "hồ sơ không có BCTC" if not statements
-        else "pass BCTC không đọc được chỉ tiêu này"
+        else "không đọc được chỉ tiêu này trên báo cáo tài chính"
     )
     if not statements:
         for path, _ in _FINANCIAL_METRICS:
@@ -644,7 +648,7 @@ def _assemble_proposal(facts: Facts, documents: list[PostcheckDocument]) -> None
     proposals = [d for d in documents if isinstance(d.proposal, dict)]
     reason = (
         "hồ sơ không có Đề nghị cấp tín dụng" if not proposals
-        else "pass Đề nghị cấp tín dụng không đọc được mục này"
+        else "không đọc được mục này trên Đề nghị cấp tín dụng"
     )
     facts.set(
         "doc.proposal.declared_revenue",
@@ -697,6 +701,10 @@ class PostcheckSupervisor:
     def __init__(self, config: Any):
         self.config = config
         self.settings = get_settings()
+        # One vault per review: it learns names from this dossier's documents and
+        # is the only thing that can turn the tokens back.
+        self.vault = (vault_from_settings(self.settings)
+                      if getattr(config, "mask_pii", True) else None)
         self.workflow_graph = self._build_workflow_graph()
 
     def _build_workflow_graph(self):
@@ -747,7 +755,8 @@ class PostcheckSupervisor:
     ) -> PostcheckGraphState:
         """Run each extraction pass over the documents it applies to."""
 
-        calls = run_extraction_passes(state["documents"], self.config, self.settings)
+        calls = run_extraction_passes(state["documents"], self.config, self.settings,
+                                      self.vault)
         spent = sum(calls.values())
         steps = state.get("steps", [])
         steps.append(
@@ -817,7 +826,8 @@ class PostcheckSupervisor:
     ) -> PostcheckGraphState:
         """The only model call outside extraction: the two BRD commentary sections."""
 
-        commentary = build_commentary(state["findings"], self.config.commentary_llm)
+        commentary = build_commentary(state["findings"], self.config.commentary_llm,
+                                      self.vault)
         steps = state.get("steps", [])
         steps.append(f"Viết nhận định cho {len(commentary)} mục")
         return {**state, "commentary": commentary, "steps": steps}

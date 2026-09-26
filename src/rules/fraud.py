@@ -1,14 +1,4 @@
-"""BRD 2.2 - Identify signs of suspected fraud.
-
-BRD row 20 - checking a document's authenticity against the fraud-risk team's
-guidance - is deliberately NOT implemented: that guidance was never supplied, and
-the business has confirmed the row is out of scope. Only row 19, the
-internal-consistency check, is graded here.
-
-The functions here DECIDE; they do not declare. Which of them is a rule, under
-what id, title and severity, and on which facts, is in src/rules/registry.py -
-one catalogue for all of them, so there is one place to look.
-"""
+"""BRD 2.2 - Identify signs of suspected fraud. """
 
 from src.facts import Facts
 from src.rules._compare import distinct, make_address_normalizer, norm_digits, norm_text, rows

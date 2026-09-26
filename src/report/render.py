@@ -2,12 +2,15 @@
 
 from src.facts import FACT_KEYS, Facts, db_facts
 from src.report.templates import Template, get_template
-from src.rules.engine import Finding, summarise
+from src.rules.engine import SEVERITY_LABELS, Finding, summarise
 
 
 TEMPLATE_NAME = "post-check-template"
 
-STATUS_MARK = {"PASS": "Đạt", "FAIL": "**Không đạt**", "INSUFFICIENT_DATA": "_Thiếu dữ liệu_"}
+STATUS_MARK = {"PASS": "Đạt", "FAIL": "**KHÔNG ĐẠT**", "INSUFFICIENT_DATA": "_Thiếu dữ liệu_"}
+
+# Severity no longer has a column, but it still decides what a reader sees first.
+SEVERITY_ORDER = list(SEVERITY_LABELS)
 
 EMPTY_TABLE = "_Không có tiêu chí nào trong mục này._"
 EMPTY_COMMENTARY = "_Chưa có nhận định cho mục này._"
@@ -22,16 +25,23 @@ def _criteria_table(findings: list[Finding]) -> str:
     if not findings:
         return EMPTY_TABLE
     header = (
-        "| Mã | Nội dung kiểm tra | Kết quả | Ghi nhận thực tế | Yêu cầu | Mức độ |\n"
-        "|---|---|---|---|---|---|\n"
+        "| Mã | Nội dung kiểm tra | Kết quả | Ghi nhận thực tế | Yêu cầu |\n"
+        "|---|---|---|---|---|\n"
     )
-    rows = "".join(
-        f"| {finding.rule_id} | {_cell(finding.title)} | {STATUS_MARK[finding.status]} "
-        f"| {_cell(finding.observed)} | {_cell(finding.expected)} "
-        f"| {finding.severity_label} |\n"
-        for finding in findings
-    )
+    rows = "".join(_criteria_row(finding) for finding in findings)
     return header + rows
+
+
+def _criteria_row(finding: Finding) -> str:
+    """One criterion. A failure is marked in the code cell as well as the result
+    cell: on a page this wide the eye runs down the left edge, not the middle."""
+
+    failed = finding.status == "FAIL"
+    code = f"**{finding.rule_id}**" if failed else finding.rule_id
+    return (
+        f"| {code} | {_cell(finding.title)} | {STATUS_MARK[finding.status]} "
+        f"| {_cell(finding.observed)} | {_cell(finding.expected)} |\n"
+    )
 
 
 def _no_approval_record(facts: Facts | None) -> bool:
@@ -51,10 +61,14 @@ def _summary(findings: list[Finding], facts: Facts | None = None) -> str:
         f"{counts['TOTAL']} tiêu chí.",
     ]
 
-    severe = [f for f in findings if f.status == "FAIL" and f.severity == "high"]
-    if severe:
-        lines += ["", f"**{len(severe)} tiêu chí không đạt ở mức độ cao:**", ""]
-        lines += [f"- **{f.rule_id}** {f.title} — {_cell(f.observed)}" for f in severe]
+    # EVERY failure, gravest first - so nobody has to scan 40 rows to find them.
+    failures = sorted(
+        (f for f in findings if f.status == "FAIL"),
+        key=lambda f: SEVERITY_ORDER.index(f.severity),
+    )
+    if failures:
+        lines += ["", f"**{len(failures)} tiêu chí KHÔNG ĐẠT:**", ""]
+        lines += [f"- **{f.rule_id}** {f.title} — {_cell(f.observed)}" for f in failures]
 
     if _no_approval_record(facts):
         lines += ["", (

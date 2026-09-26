@@ -106,6 +106,11 @@ def load_settings(path: Path | str | None = None) -> dict[str, Any]:
             str(code).strip() for code in (raw.get(key) or []) if str(code or "").strip()
         ]
     settings["debt_group_by_label"] = raw.get("debt_group_by_label") or {}
+    for key in ("pii_person_cues", "pii_surnames", "pii_identifier_cues",
+                "pii_contact_cues"):
+        settings[key] = [
+            str(cue).strip() for cue in (raw.get(key) or []) if str(cue or "").strip()
+        ]
     settings["financial_report_types"] = raw.get("financial_report_types") or {}
 
     personas = raw.get("persona_evidence") or {}

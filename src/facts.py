@@ -100,8 +100,8 @@ FACT_KEYS: dict[str, FactSpec] = {
 
     # --- T24: what was actually booked (BRD 2.3.c) -------------------------
     "t24.booking_date":             FactSpec(T24, QUERY, "Ngày hạch toán HMTD"),
-    "t24.active_limit":             FactSpec(T24, QUERY, "Tổng HMTD đã active, đồng"),
-    "t24.active_limit_by_product":  FactSpec(T24, QUERY, "HMTD đã active theo từng sản phẩm, đồng"),
+    "t24.active_limit":             FactSpec(T24, QUERY, "Tổng HMTD đã hạch toán, đồng"),
+    "t24.active_limit_by_product":  FactSpec(T24, QUERY, "HMTD đã hạch toán theo từng sản phẩm, đồng"),
     "t24.ccr":                      FactSpec(T24, QUERY, "CCR hạch toán trên BBC, phần trăm"),
     "t24.outstanding":              FactSpec(T24, QUERY, "Dư nợ (dư nghĩa vụ) tại TCB, đồng"),
     "cashflow.pdld_count":          FactSpec(T24, QUERY, "Số LD quá hạn (PDLD) phát sinh"),
@@ -194,11 +194,11 @@ FACT_KEYS: dict[str, FactSpec] = {
 # `verify_manual_facts` asserts this set matches reality in both directions.
 # The reason strings are Vietnamese: they are printed into the report appendix.
 MANUAL_FACTS: dict[str, str] = {
-    "doc.owner_name_values":                 "chưa có nguồn trích xuất; điền thủ công hoặc bổ sung pass",
-    "doc.owner_id_number_values":            "chưa có nguồn trích xuất; điền thủ công hoặc bổ sung pass",
-    "doc.owner_birth_year_values":           "chưa có nguồn trích xuất; điền thủ công hoặc bổ sung pass",
-    "doc.industry_on_registration":          "chưa có pass đọc giấy đăng ký kinh doanh",
-    "doc.signature_and_seal":                "chưa có pass nhận diện chữ ký và con dấu",
+    "doc.owner_name_values":                 "chưa có nguồn trích xuất; điền thủ công hoặc bổ sung bước đọc chứng từ",
+    "doc.owner_id_number_values":            "chưa có nguồn trích xuất; điền thủ công hoặc bổ sung bước đọc chứng từ",
+    "doc.owner_birth_year_values":           "chưa có nguồn trích xuất; điền thủ công hoặc bổ sung bước đọc chứng từ",
+    "doc.industry_on_registration":          "chưa có bước đọc giấy đăng ký kinh doanh",
+    "doc.signature_and_seal":                "chưa có bước nhận diện chữ ký và con dấu",
 }
 
 
@@ -329,6 +329,16 @@ class Facts:
         spec = FACT_KEYS.get(path)
         description = spec.description if spec else path
         return f"{description}: {self._reasons.get(path, DEFAULT_MISSING_REASON)}"
+
+    def missing_reason(self, path: str) -> str:
+        """Why a fact is absent, with no description in front of it."""
+
+        return self._reasons.get(path, "")
+
+    def empty_note(self, path: str) -> str:
+        """Why an EMPTY value is an answer rather than a gap, if it is one."""
+
+        return self._empty_notes.get(path, "")
 
     # -- serialisation ------------------------------------------------------
 

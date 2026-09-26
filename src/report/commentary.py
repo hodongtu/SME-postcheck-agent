@@ -94,6 +94,7 @@ def _describe(findings: list[Finding]) -> str:
 def build_commentary(
     findings: list[Finding],
     llm: Any,
+    vault: Any = None,
     sections: tuple[str, ...] = ("1.2", "1.4"),
 ) -> dict[str, str]:
     """One paragraph per section. With no LLM it returns empty, and the report
@@ -122,14 +123,19 @@ def build_commentary(
             | llm
             | StrOutputParser()
         )
+        described = _describe(rows)
+        if vault is not None:
+            described = vault.mask(described)
         try:
-            written = chain.invoke({"section": section, "findings": _describe(rows)})
+            written = chain.invoke({"section": section, "findings": described})
         except Exception as exc:                 
             out[section] = (
                 f"_Chưa sinh được nhận định cho mục này: {type(exc).__name__}: {exc}_"
             )
             continue
 
+        if vault is not None:
+            written = vault.unmask(written)
         text, notes = audit_commentary(written, rows)
         if notes:
             text += "\n\n" + "\n".join(

@@ -66,6 +66,14 @@ th, td {{
     word-break: break-word;
 }}
 th {{ background: #eef2f6; text-align: left; }}
+/* A failed criterion, tinted and ruled at the left edge. Colour alone is not
+   enough - the cell text says KHÔNG ĐẠT too, so the row survives a greyscale
+   print and a reader who cannot separate red from grey. */
+tr.fail td {{ background: #fdecea; }}
+tr.fail td:first-child {{ border-left: 3px solid #c0392b; font-weight: bold; }}
+/* The verdict reads as one word or it reads as broken. Widening this column
+   also stops "Thiếu dữ liệu" splitting in the rows around it. */
+tr.fail td:nth-child(3) {{ white-space: nowrap; }}
 tr {{ page-break-inside: avoid; }}
 thead {{ display: table-header-group; }}
 
@@ -98,6 +106,23 @@ sup a.footnote-ref {{ font-size: 7pt; text-decoration: none; color: #2f6f9f; }}
 a.footnote-backref {{ text-decoration: none; margin-left: 4px; }}
 {DIAGRAM_CSS}
 """
+
+
+FAIL_MARK = "KHÔNG ĐẠT"
+
+
+def highlight_failed_rows(html: str) -> str:
+    """Tag every table row that reports a failed criterion, so the CSS can tint it."""
+
+    def replace(match: re.Match[str]) -> str:
+        row = match.group(0)
+        if FAIL_MARK not in row or "<tr" not in row:
+            return row
+        if 'class="' in row[:row.find(">") + 1]:
+            return row.replace('class="', 'class="fail ', 1)
+        return row.replace("<tr", '<tr class="fail"', 1)
+
+    return _ROW.sub(replace, html or "")
 
 
 def _column_count(table_body: str) -> int:

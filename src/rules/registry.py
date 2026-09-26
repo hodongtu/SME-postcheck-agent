@@ -1,19 +1,4 @@
-"""THE RULE CATALOGUE - every rule in the system, declared here and nowhere else.
-
-One file to read and one file to edit. Each entry says what the rule is called,
-what passing looks like, how severe a failure is, and which facts it may read;
-the function that decides it lives in the module named on the line, grouped by
-BRD section - so the catalogue also tells you where to go.
-
-Section headings and print order are NOT here: they live in
-src/templates/post-check-template.md, which declares with its
-`<!-- rules: ... -->` markers which criteria print under which section, and
-verify_template asserts every rule below appears there exactly once.
-
-The import-time check at the bottom is why a mistyped fact path cannot become a
-silent unchecked row: it raises when this module is first imported, which happens
-before any run.
-"""
+"""THE RULE CATALOGUE - every rule in the system, declared here and nowhere else. """
 
 from src.rules import criteria, dossier, ews, fraud, identity, operation
 from src.rules.engine import Rule, validate_needs
@@ -105,7 +90,7 @@ RULES: tuple[Rule, ...] = (
          needs=("los.program", "los.tax_code"),
          check=dossier.check_program),
     Rule(id="P02",
-         title="Đủ hồ sơ theo checklist của chương trình",
+         title="Đủ hồ sơ theo danh mục hồ sơ của chương trình",
          expected="Mọi đầu mục bắt buộc của chương trình đều có mặt trong hồ sơ",
          severity="high",
          needs=("los.program", "los.is_site_visit", "doc.types_present"),
@@ -136,7 +121,7 @@ RULES: tuple[Rule, ...] = (
          check=dossier.check_balance),
     Rule(id="P07",
          title="Kỳ BCTC phù hợp theo quy định",
-         expected="Active trước 30/4 dùng BCTC N-2; từ 30/4 dùng BCTC N-1",
+         expected="Hạch toán trước 30/4 dùng BCTC N-2; từ 30/4 dùng BCTC N-1",
          severity="medium",
          needs=("doc.financials.report_year", "t24.booking_date"),
          check=dossier.check_report_period),
@@ -192,7 +177,7 @@ RULES: tuple[Rule, ...] = (
          check=operation.check_within_validity),
     Rule(id="O02",
          title="Tổng giá trị HMTD không vượt quá giá trị hội sở trả ra",
-         expected="HMTD active trên T24, tổng và từng sản phẩm, không vượt HMTD phê duyệt trên LOS",
+         expected="HMTD đã hạch toán trên T24, tổng và từng sản phẩm, không vượt HMTD phê duyệt trên LOS",
          severity="high",
          needs=("t24.active_limit", "t24.active_limit_by_product",
                "los.approved_limit", "los.approved_limit_by_product"),

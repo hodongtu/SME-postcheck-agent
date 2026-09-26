@@ -40,12 +40,7 @@ def make_address_normalizer(abbreviations: dict[str, str]) -> Callable[[Any], st
 
 
 def industry_matches(left: Any, right: Any) -> bool:
-    """Two industry descriptions match when equal, or one contains the other.
-
-    Industry is written at different levels of detail depending on the
-    document: LOS returns one short line, the business registration lists every
-    registered activity. Containment is the strictest test that still works.
-    """
+    """Two industry descriptions match when equal, or one contains the other. """
 
     first, second = norm_text(left), norm_text(right)
     if not first or not second:
@@ -68,11 +63,7 @@ def rows(values: list[dict[str, Any]]) -> list[tuple[str, Any]]:
 def distinct(
     pairs: list[tuple[str, Any]], normalizer: Callable[[Any], str]
 ) -> dict[str, tuple[Any, list[str]]]:
-    """Group by normalised value. More than one key means the dossier disagrees.
-
-    Each group keeps the first value as printed: the report must quote what the
-    document actually says, not the accent-stripped form used for matching.
-    """
+    """Group by normalised value. More than one key means the dossier disagrees. """
 
     groups: dict[str, tuple[Any, list[str]]] = {}
     for filename, value in pairs:

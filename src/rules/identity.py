@@ -1,17 +1,4 @@
-"""BRD 2.1 - Verify the customer information.
-
-Compare what head office returned (LOS) against the customer's documents and
-the business unit's site visit.
-
-V08 and V09 compare a third thing: what the RM keyed into LOS by hand against
-what the paperwork actually says. Same subject, two accounts of it, one typed
-from the other - so a difference is either a keying error or a document that does
-not support what was entered, and both are worth a reviewer's attention.
-
-The functions here DECIDE; they do not declare. Which of them is a rule, under
-what id, title and severity, and on which facts, is in src/rules/registry.py -
-one catalogue for all of them, so there is one place to look.
-"""
+"""BRD 2.1 - Verify the customer information. """
 
 from typing import Any, Callable
 
@@ -26,6 +13,7 @@ from src.rules._compare import (
 )
 from src.rules.engine import Verdict, failed, passed, variance_pct
 from src.utils.common import normalize_text
+from src.utils.pii import IDENTIFIER, NAME, as_hash, show
 
 
 def _against_los(
@@ -42,24 +30,28 @@ def _against_los(
     pairs = rows(facts.get(doc_path))
 
     if not pairs:
-        # The fact is present but every cell is blank: there is nothing to
-        # compare, and passing quietly here is exactly the green-on-empty bug.
         return failed(
-            f"{label} trên LOS là “{expected}” nhưng không chứng từ nào đọc được "
+            f"{label} trên LOS là “{show(expected)}” nhưng không chứng từ nào đọc được "
             f"{label.lower()} để đối chiếu"
         )
 
     mismatched = [(name, value) for name, value in pairs
                   if normalizer(value) != normalized_expected]
     if mismatched:
-        detail = "; ".join(f"{name}: “{value}”" for name, value in mismatched)
+        detail = "; ".join(f"{name}: “{show(value)}”" for name, value in mismatched)
         return failed(
-            f"{label} trên LOS là “{expected}”; lệch ở {len(mismatched)}/{len(pairs)} "
+            f"{label} trên LOS là “{show(expected)}”; lệch ở {len(mismatched)}/{len(pairs)} "
             f"chứng từ — {detail}"
         )
     return passed(
-        f"{label} “{expected}” khớp trên toàn bộ {len(pairs)} chứng từ đọc được"
+        f"{label} “{show(expected)}” khớp trên toàn bộ {len(pairs)} chứng từ đọc được"
     )
+
+
+def _hashed(kind: str):
+    """Compare by hash - LOS returns hashes for the columns that hold PII."""
+
+    return lambda value: as_hash(value, kind)
 
 
 def check_customer_name(facts: Facts, settings: dict) -> Verdict:
@@ -80,12 +72,12 @@ def check_address(facts: Facts, settings: dict) -> Verdict:
 
 def check_owner_name(facts: Facts, settings: dict) -> Verdict:
     return _against_los(facts, "los.owner_name", "doc.owner_name_values",
-                        "Tên chủ doanh nghiệp", norm_text)
+                        "Tên chủ doanh nghiệp", _hashed(NAME))
 
 
 def check_owner_id_number(facts: Facts, settings: dict) -> Verdict:
     return _against_los(facts, "los.owner_id_number", "doc.owner_id_number_values",
-                        "Số CCCD chủ doanh nghiệp", norm_digits)
+                        "Số CCCD chủ doanh nghiệp", _hashed(IDENTIFIER))
 
 
 def check_owner_birth_year(facts: Facts, settings: dict) -> Verdict:
@@ -177,8 +169,8 @@ def check_persona_photos(facts: Facts, settings: dict) -> Verdict:
     entry = table.get(normalize_text(persona))
     if entry is None:
         return failed(
-            f"Chân dung “{persona}” chưa khai trong persona_evidence "
-            f"(config/programs.yaml) nên không biết ảnh cần cho thấy gì"
+            f"Chân dung “{persona}” chưa khai dấu hiệu kỳ vọng trong cấu hình hệ "
+            f"thống nên không biết ảnh cần cho thấy gì"
         )
 
     expected = {normalize_text(marker) for marker in entry["expected"]}

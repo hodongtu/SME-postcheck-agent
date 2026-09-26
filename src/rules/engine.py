@@ -1,20 +1,4 @@
-"""The rule engine: types, the missing-data guard, and the runner.
-
-The guard is the point of this module. A rule's `check` never sees a MISSING
-fact, because the runner refuses to call it when one of the facts it declared
-is absent - and `Verdict` cannot express insufficient data, so a rule cannot
-reach that state on its own either. Both halves matter: the first stops a rule
-from reading an empty cell, the second stops it from claiming it checked
-something it did not.
-
-This is load-bearing, and measured. Remove the gate and call `check` directly
-on a full dossier with exactly one fact deleted: 14 of 84 combinations return
-PASS instead of failing, among them the one announcing that neither customer
-nor owner is on the black or warning list, when that lookup returned nothing.
-
-Identifiers and comments are English; the strings a reviewer reads are
-Vietnamese.
-"""
+"""The rule engine: types, the missing-data guard, and the runner. """
 
 from dataclasses import dataclass, field
 from datetime import date
@@ -41,12 +25,7 @@ NOT_CHECKED_PREFIX = "Chưa kiểm được."
 
 @dataclass(frozen=True)
 class Verdict:
-    """What a rule concluded. Deliberately cannot say insufficient data.
-
-    There is no evidence field: `observed` already names the documents inline,
-    beside the values that differ, which is both shorter and more use to a
-    reader than a bare list of file names.
-    """
+    """What a rule concluded. Deliberately cannot say insufficient data. """
 
     status: Literal["PASS", "FAIL"]
     observed: str                      # Vietnamese: printed in the report
@@ -71,12 +50,7 @@ def failed(observed: str) -> Verdict:
 
 @dataclass(frozen=True)
 class Rule:
-    """One line of the BRD, expressed as something a machine can decide.
-
-    A rule does NOT record where it is printed. src/templates/post-check-template.md
-    owns that, with its `<!-- rules: ... -->` markers, so there is one place to
-    look and one place to edit.
-    """
+    """One line of the BRD, expressed as something a machine can decide. """
 
     id: str                     # "O01"
     title: str                  # Vietnamese, verbatim from the BRD

@@ -30,6 +30,8 @@ prompt and a Vietnamese docstring got in unnoticed.
 from _harness import ROOT, report
 import ast
 import io
+import json
+import re
 import sys
 import tokenize
 import unicodedata
@@ -40,8 +42,13 @@ import unicodedata
 VENDORED_TREES = ("src/agents/", "src/utils/")
 OURS_INSIDE_VENDORED = (
     "src/agents/extraction/sitevisit_photo_extraction.py",
+    "src/utils/pii.py",
     "src/utils/reading/digital_signature.py",
 )
+
+# Files outside src/ and testing/ that still hold developer-facing prose.
+TEXT_FILES = ("requirements.txt", "config/programs.yaml")
+NOTEBOOKS = ("local_postcheck.ipynb",)
 FACT_PATH_PATTERN = "abcdefghijklmnopqrstuvwxyz0123456789_."
 
 
@@ -64,6 +71,21 @@ def _accented_letters(text: str) -> set[str]:
         elif char in "đĐ":
             found.add(char)
     return found
+
+
+_QUOTED = re.compile(r"\"[^\"\n]*\"|'[^'\n]*'|`[^`\n]*`")
+
+
+def _outside_quotes(text: str) -> str:
+    """The text with quoted spans removed.
+
+    A comment about Vietnamese data has to name it: `"Chủ tịch" is a role, not a
+    surname` is an English comment doing its job, and rejecting it would push the
+    author into paraphrase - which is how the reason for a rule gets lost. What is
+    banned is Vietnamese PROSE, so only what sits outside the quotes is judged.
+    """
+
+    return _QUOTED.sub(" ", text)
 
 
 def _identifiers(tree: ast.AST) -> set[str]:
@@ -133,7 +155,7 @@ def _scan_source_files(problems: list[str]) -> int:
                 problems.append(f"{relative}: identifier '{name}' uses {sorted(bad)}")
 
         for text in _docstrings(tree):
-            bad = _accented_letters(text)
+            bad = _accented_letters(_outside_quotes(text))
             if bad:
                 first = text.strip().splitlines()[0][:60]
                 problems.append(
@@ -141,10 +163,91 @@ def _scan_source_files(problems: list[str]) -> int:
                 )
 
         for comment in _comments(source):
-            bad = _accented_letters(comment)
+            bad = _accented_letters(_outside_quotes(comment))
             if bad:
                 problems.append(
                     f"{relative}: comment uses {sorted(bad)[:6]} - {comment[:60]}"
+                )
+    return scanned
+
+
+def _scan_notebooks(problems: list[str]) -> int:
+    """Notebook cells: comments, print output and the prose around them.
+
+    The notebook is the operator's console, not the report - what it prints is
+    read beside a traceback, so it is code, and code here is English.
+    """
+
+    scanned = 0
+    for name in NOTEBOOKS:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        scanned += 1
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        for index, cell in enumerate(notebook.get("cells", [])):
+            source = "".join(cell.get("source", []))
+            if cell.get("cell_type") == "markdown":
+                bad = _accented_letters(_outside_quotes(source))
+                if bad:
+                    problems.append(
+                        f"{name}: markdown cell {index} uses {sorted(bad)[:6]}"
+                    )
+                continue
+            for comment in _comments(source):
+                bad = _accented_letters(_outside_quotes(comment))
+                if bad:
+                    problems.append(
+                        f"{name}: cell {index} comment uses {sorted(bad)[:6]} "
+                        f"- {comment[:60]}"
+                    )
+            try:
+                tree = ast.parse(source)
+            except SyntaxError:
+                continue
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == "print"):
+                    continue
+                for text in _literal_text(node.args):
+                    bad = _accented_letters(text)
+                    if bad:
+                        problems.append(
+                            f"{name}: cell {index} prints {sorted(bad)[:6]} "
+                            f"- {text[:60]}"
+                        )
+    return scanned
+
+
+def _literal_text(nodes: list[ast.expr]) -> list[str]:
+    """The literal parts of each argument - an f-string's fields are values."""
+
+    out: list[str] = []
+    for node in nodes:
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            out.append(node.value)
+        elif isinstance(node, ast.JoinedStr):
+            out.append("".join(part.value for part in node.values
+                               if isinstance(part, ast.Constant)))
+    return out
+
+
+def _scan_text_files(problems: list[str]) -> int:
+    """Comment lines in requirements and config. The VALUES there stay Vietnamese."""
+
+    scanned = 0
+    for name in TEXT_FILES:
+        path = ROOT / name
+        if not path.exists():
+            continue
+        scanned += 1
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.lstrip().startswith("#"):
+                continue
+            bad = _accented_letters(_outside_quotes(line))
+            if bad:
+                problems.append(
+                    f"{name}:{number}: comment uses {sorted(bad)[:6]} - {line.strip()[:60]}"
                 )
     return scanned
 
@@ -203,6 +306,8 @@ def prompt_schema_keys() -> list[tuple[str, str, str]]:
 def main() -> int:
     problems: list[str] = []
     scanned = _scan_source_files(problems)
+    notebooks = _scan_notebooks(problems)
+    texts = _scan_text_files(problems)
     facts = _scan_fact_paths(problems)
     # A Vietnamese key would flow straight into pipeline.py and the rules; a
     # Vietnamese VALUE in the same schema is document data and must stay.
@@ -233,7 +338,8 @@ def main() -> int:
 
     return report(
         problems,
-        f"{scanned} authored files under src/ and testing/ are written in English; "
+        f"{scanned} authored files under src/ and testing/, {notebooks} notebook and "
+        f"{texts} config/requirements file(s) are written in English; "
         f"{facts} fact paths are ASCII",
     )
 

@@ -126,7 +126,10 @@ _validate()
 
 
 def run_extraction_passes(
-    documents: list[PostcheckDocument], config: Any, settings: dict
+    documents: list[PostcheckDocument],
+    config: Any,
+    settings: dict,
+    vault: Any = None,
 ) -> dict[str, int]:
     """Run each applicable pass over each document. Returns calls made per pass. """
 
@@ -161,14 +164,15 @@ def run_extraction_passes(
                     setattr(
                         document,
                         extraction_pass.error_attr,
-                        f"chưa cấu hình LLM cho pass '{extraction_pass.label}'",
+                        "chưa cấu hình mô hình cho bước trích xuất này",
                     )
                     continue
                 if remaining <= 0:
                     setattr(
                         document,
                         extraction_pass.error_attr,
-                        f"vượt trần {config.max_extraction_calls} lần gọi LLM mỗi hồ sơ",
+                        f"vượt trần {config.max_extraction_calls} lần gọi mô hình "
+                        f"mỗi hồ sơ",
                     )
                     continue
                 remaining -= 1
@@ -183,9 +187,18 @@ def run_extraction_passes(
                  "max_images": getattr(config, "max_photo_images", 12)}
                 if extraction_pass.reads_file else {}
             )
+            # Mask only what actually leaves the machine. A pass that spends no
+            # LLM call parses the file locally - the tax-filing XML - and must see
+            # the real text.
+            content = document.content
+            if vault is not None and spends:
+                content = vault.mask(content)
+
             result, error = extraction_pass.extract(
-                chain, document.filename, document.content, document.path, **extras
+                chain, document.filename, content, document.path, **extras
             )
+            if vault is not None and result is not None:
+                result = vault.unmask(result)
             setattr(document, extraction_pass.result_attr, result)
             setattr(document, extraction_pass.error_attr, error)
             if result is not None and spends:

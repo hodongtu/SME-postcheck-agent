@@ -508,6 +508,139 @@ câu trả lời sạch. Truy vấn ném lỗi thì vẫn báo Thiếu dữ li�
 `verify_dummy_db` chốt hành vi này bằng cách xoá sạch hai bảng rồi đòi mọi fact
 BL/WL và AMC phải mang giá trị `False`, không phải một lý do.
 
+### Trace từng tiêu chí: `criteria_trace.json`
+
+Mỗi lượt chạy ghi thêm `logs/<hồ sơ>_<thời điểm>/criteria_trace.json`: **một entry
+cho mỗi tiêu chí**, nói rõ nó đã đọc fact nào và giá trị bao nhiêu — để tự kiểm tra
+lại kết luận mà không phải đối chiếu tay giữa 40 rule và 78 fact.
+
+```json
+"O02": {
+  "title": "Tổng giá trị HMTD không vượt quá giá trị hội sở trả ra",
+  "status": "FAIL",
+  "status_label": "Không đạt",
+  "observed": "… tổng: đã hạch toán 6,000,000,000 đ > phê duyệt 4,000,000,000 đ …",
+  "inputs": [
+    {"path": "t24.active_limit",   "description": "Tổng HMTD đã hạch toán, đồng",
+     "category": "T24", "delivery": "query", "present": true, "value": 6000000000},
+    {"path": "los.approved_limit", "description": "Tổng HMTD được phê duyệt, đồng",
+     "category": "LOS", "delivery": "query", "present": true, "value": 4000000000}
+  ],
+  "missing": []
+}
+```
+
+`inputs` là **đúng** danh sách `Rule.needs`, cùng thứ tự — không thiếu một fact nào
+rule đã đọc, cũng không thêm fact nào rule không đọc. Fact vắng thì có
+`"present": false` kèm `missing_reason`; danh sách rỗng **hợp lệ** (không ai trong
+BL/WL) thì có `empty_note`, để "rỗng" không bị đọc thành "tra cứu hỏng".
+
+`verify_criteria_trace` chốt ba điều: mọi tiêu chí đều có trace, mọi kết luận
+*Thiếu dữ liệu* đều nêu được fact nào vắng **và vì sao**, và mọi kết luận đã chấm
+đều có đủ input — tức là chấm lại bằng tay được.
+
+Khác với báo cáo: file này **có** tên fact (`los.approved_limit`) và hash, vì nó
+dùng để truy vết, không phải để người rà soát đọc.
+
+### Che PII: hash vừa là token gửi mô hình, vừa là khoá tra DB
+
+Không dữ liệu cá nhân nào rời máy. Một chuỗi làm cả hai việc: **hash SHA-256 của
+giá trị đã chuẩn hoá** vừa là bút danh gửi cho mô hình, vừa là khoá join với
+database — nơi các cột PII cũng lưu hash chứ không lưu tên thật.
+
+```
+chứng từ ──▶ dò PII ──▶ chuẩn hoá ──▶ SHA-256 ──┬──▶ token gửi cho LLM
+(nguồn plaintext duy nhất)                      └──▶ khoá WHERE khi query DB
+```
+
+Vì DB chỉ trả hash, **chứng từ là nguồn plaintext duy nhất**: lớp dò phía chứng từ
+không có lớp thứ hai đỡ sau, nên một cái tên bị bỏ sót vừa là rò rỉ vừa là một
+phép đối chiếu hỏng. Phần đo ở dưới nói con số thật của rủi ro đó.
+
+#### Ràng buộc với đội DB — quan trọng nhất
+
+DB phải hash **đúng chuỗi đã chuẩn hoá theo bảng này**, không phải chuỗi thô:
+
+| Loại | Chuẩn hoá trước khi hash | Ví dụ |
+|---|---|---|
+| tên người | `normalize_text` — bỏ dấu, gộp khoảng trắng, hạ chữ thường | `Trần Thị Mai Hương` → `nguyen thi thu huyen` |
+| CCCD/CMND | `norm_digits` — chỉ giữ chữ số | `001 080 001234` → `001080001234` |
+| liên lạc | bỏ mọi khoảng trắng, hạ chữ thường | `ir@congtyabc.vn` → `ir@congtyabc.vn` |
+
+Lý do phải chuẩn hoá trước: OCR tiếng Việt sai dấu có hệ thống — cùng một người
+mà hồ sơ đọc ra `Huyễn` trong khi LOS khai `Huyền`. Hash chuỗi thô thì hai bên
+lệch nhau, và **V04/V05 sẽ luôn báo lệch, trông y như hồ sơ có sai lệch thật**.
+`normalise_for_hash` trong [src/utils/pii.py](src/utils/pii.py) là bản mô tả chính
+xác của hợp đồng này; `verify_pii_masking` khẳng định hash đọc từ chứng từ bằng
+đúng giá trị cột trong DB dummy.
+
+`as_hash` **luỹ đẳng**: giá trị đã là hash 64 ký tự hex thì đi qua nguyên vẹn, còn
+lại thì được hash. Nhờ vậy một phép so sánh chạy đúng dù cột đã hash hay còn
+plaintext, và ngày DB đổi sang hash không phải sửa một rule nào.
+
+#### Mọi mẫu dò đều phải có nhãn dẫn
+
+Đo trên hồ sơ thật: che mọi dãy 9–12 chữ số thì nuốt luôn MST `0201123795`, tổng
+tài sản `50226331878` và doanh thu `62116063780`; mẫu số điện thoại không nhãn cho
+**7 khớp trên một sổ chi tiết thật, 0 đúng** — tất cả nằm trong số tiền viết kiểu
+`441.404.102.877`. Hỏng kiểu này **im lặng**: mô hình nhận bảng cân đối toàn hash,
+trả số rỗng, báo cáo ghi "thiếu dữ liệu" trông hệt một hồ sơ nộp thiếu. Vì thế
+phép thử số 3 ở dưới tồn tại.
+
+Ba lớp dò, tất cả phía chứng từ:
+
+1. **Sau nhãn người** — `Ông`, `Bà`, `Giám đốc`, `Kế toán trưởng`, `Người lập`,
+   `Chủ tịch`… So khớp trên bản **bỏ dấu** nên một nhãn bắt được mọi biến thể OCR
+   (`Ủng`, `Giảm đắc`); nhưng giá trị **sau** nhãn thì khớp trên bản **gốc**, vì
+   chữ hoa mới là dấu hiệu một từ là tên, và bản bỏ dấu đã đánh mất nó.
+2. **Sau họ** — tên người Việt mở đầu bằng một tập họ đóng. Cần lớp này: nhãn dẫn
+   một mình chỉ bắt được 6 trong 16 lần xuất hiện tên trên một BCTC thật, phần còn
+   lại nằm trong khối chữ ký không có nhãn nào đứng trước.
+3. **Quét lại giá trị đã học** — một lần bắt được ở đâu thì che ở mọi chỗ khác,
+   bỏ dấu nên bắt cả biến thể OCR.
+
+Ba quy tắc cắt, mỗi quy tắc sinh ra từ một lần đo hỏng:
+
+- **Từ IN HOA không phải tên.** Không có nó thì `CÁO TÀI CHÍNH RIÊNG` và
+  `LƯU CHUYỂN TIỀN TỆ` bị che — chính tiêu đề của tài liệu.
+- **Khoảng trắng rộng hơn khoảng đầu tiên là ranh giới ô bảng.** Khối chữ ký đọc
+  ra `Trần Mai Hương  Lê Vũ Thành` liền một dòng; che cả cụm thì hash không
+  khớp gì trong DB.
+- **Cắt tại từ chỉ chức danh** (`NON_NAME_WORDS`), không loại cả chuỗi: loại thì
+  `Nguyễn Thị Thu` trong `Nguyễn Thị Thu  Chủ tịch` nằm lại nguyên văn.
+
+#### Đo trên hồ sơ thật
+
+Hai BCTC thật trong `samples/case_1/ho_so_tai_chinh` (không vào repo, chạy tay):
+
+| | BCTC 2025 (19k ký tự) | BCTC 2024 (89k ký tự) |
+|---|---|---|
+| giá trị bị che | 20 | 31 |
+| tên người còn đọc được | **0/12** | **0/12** |
+| dãy số ≥7 chữ số bị che nhầm | **0/167** | **0/499** |
+
+Phần dương tính giả còn lại là **địa danh viết hoa đầu chữ** (`Hà Nội`,
+`Dương Nội`, `Hồ Chí Minh`) và rác OCR (`Hà NfZ`, `VU Os`) — che thêm mấy chuỗi
+này không làm hỏng gì, vì không chuỗi nào là số liệu.
+
+Điều **chưa** đo được bằng 0: một cái tên mà bộ dò bỏ sót. Với OCR nhiễu, so khớp
+chuỗi không thể đưa rủi ro đó về 0. Nếu yêu cầu là tuyệt đối thì thứ duy nhất đáp
+ứng được là mô hình chạy trong vành đai ngân hàng, và lúc đó lớp che này thành
+phòng thủ thứ hai.
+
+#### Những chỗ KHÔNG che
+
+- **Ảnh gửi nguyên** theo quyết định nghiệp vụ — mặt người, giấy tờ, biển hiệu đều
+  tới thẳng mô hình thị giác.
+- **Tên doanh nghiệp, MST, địa chỉ** vẫn gửi đi, theo phạm vi đã chốt.
+- **`logs/` và `.ocr_cache/`** giữ plaintext trên đĩa (đã gitignore, nhưng vẫn là
+  PII ngoài tầm của lớp này).
+- **Báo cáo** in tên thật ở chỗ chứng từ có cung cấp, vì kho vault học plaintext từ
+  chứng từ và đổi ngược lại khi in. Chỗ nào chỉ có LOS thì in hash rút gọn.
+
+Tắt bằng `Config(mask_pii=False)`. Nhãn dẫn khai trong `config/programs.yaml`
+(`pii_person_cues`, `pii_surnames`, `pii_identifier_cues`, `pii_contact_cues`).
+
 ## Còn phải làm trước khi dùng thật
 
 1. **`pip install -r requirements.txt`** — thiếu `python-docx` thì mọi `.docx`
@@ -519,12 +652,14 @@ BL/WL và AMC phải mang giá trị `False`, không phải một lý do.
    nối trong docstring của `get_bcde_blwl`: view phải trả một dòng cho mỗi đối
    tượng kể cả khi sạch, nếu không "không có dòng nào" vừa nghĩa là sạch vừa
    nghĩa là chưa tra được.
-3. **Xác nhận ba khoảng trống BRD ở trên** với nghiệp vụ, và duyệt hai dòng
+3. **Xác nhận với đội DB rằng cột PII được hash đúng chuỗi đã chuẩn hoá** ở bảng
+   trên. Sai chuẩn hoá thì V04/V05 luôn báo lệch mà trông như hồ sơ sai thật.
+4. **Xác nhận ba khoảng trống BRD ở trên** với nghiệp vụ, và duyệt hai dòng
    trong `not_a_check` (dòng 23 và 29 — bước chuẩn bị, không phải tiêu chí chấm).
-4. **Điền các TODO trong `config/programs.yaml`** — danh sách mã GSO ngành không
+5. **Điền các TODO trong `config/programs.yaml`** — danh sách mã GSO ngành không
    trọng tâm, `max_pdld_count`, checklist từng chương trình, và bổ sung
    `debt_group_by_label` khi gặp biến thể chữ nhóm nợ mới trên báo cáo CIC.
-5. **Nghiệm thu đầu-cuối** trên một hồ sơ thật đã có kết luận post-check thủ
+6. **Nghiệm thu đầu-cuối** trên một hồ sơ thật đã có kết luận post-check thủ
    công. Cần xác nhận riêng rằng `total_capital` vẫn ra được từ bảng cân đối
    thật: prompt BCTC của CreditMemo bỏ dòng không có số (`drop_heading_rows`),
    và nếu dòng "TỔNG CỘNG NGUỒN VỐN" bị coi là heading thì P06 hỏng.

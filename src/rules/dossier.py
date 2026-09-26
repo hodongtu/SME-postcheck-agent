@@ -1,9 +1,4 @@
-"""BRD 2.3.a - Do the documents satisfy the required checklist.
-
-The functions here DECIDE; they do not declare. Which of them is a rule, under
-what id, title and severity, and on which facts, is in src/rules/registry.py -
-one catalogue for all of them, so there is one place to look.
-"""
+"""BRD 2.3.a - Do the documents satisfy the required checklist. """
 
 from datetime import date
 
@@ -31,7 +26,7 @@ def check_program(facts: Facts, settings: dict) -> Verdict:
     if program not in known:
         return failed(
             f"LOS trả ra chương trình “{program}”, không nằm trong danh mục đã khai "
-            f"({', '.join(known)}) nên không xác định được checklist và bộ tiêu chí"
+            f"({', '.join(known)}) nên không xác định được danh mục hồ sơ và bộ tiêu chí"
         )
     return passed(f"Khách hàng thuộc chương trình {program} (MST {facts.get('los.tax_code')})")
 
@@ -43,8 +38,8 @@ def check_checklist(facts: Facts, settings: dict) -> Verdict:
     checklist = program.get("checklist", [])
     if not checklist:
         return failed(
-            f"Chương trình {facts.get('los.program')} chưa khai checklist trong "
-            f"config/programs.yaml nên không đối chiếu được danh mục hồ sơ"
+            f"Chương trình {facts.get('los.program')} chưa khai danh mục hồ sơ trong "
+            f"cấu hình hệ thống nên không đối chiếu được"
         )
 
     present = {str(type_id) for type_id in facts.get("doc.types_present")}
@@ -156,11 +151,11 @@ def check_report_period(facts: Facts, settings: dict) -> Verdict:
 
     if report_year != required_year:
         return failed(
-            f"HMTD active ngày {booking_date.isoformat()} "
+            f"HMTD hạch toán ngày {booking_date.isoformat()} "
             f"({'trước' if before_cutoff else 'từ'} {cutoff_label}) nên phải dùng BCTC "
             f"năm {required_year}; hồ sơ nộp BCTC năm {report_year}"
         )
     return passed(
-        f"HMTD active ngày {booking_date.isoformat()} và hồ sơ dùng BCTC năm "
+        f"HMTD hạch toán ngày {booking_date.isoformat()} và hồ sơ dùng BCTC năm "
         f"{report_year}, đúng quy định"
     )

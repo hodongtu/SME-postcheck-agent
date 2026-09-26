@@ -1,40 +1,40 @@
 # SME Post-check — Python dependencies
 # Install: pip install -r requirements.txt
-# Yêu cầu ngoài pip:
-#   - Tesseract OCR (chỉ cần khi hồ sơ có file PDF scan)
-#   - WeasyPrint native libs (Pango/Cairo/GLib), chỉ cần khi xuất PDF:
+# Required outside pip:
+#   - Tesseract OCR (only when a dossier holds a scanned PDF)
+#   - WeasyPrint native libs (Pango/Cairo/GLib), only when exporting the PDF:
 #     macOS:  brew install pango cairo glib
 #     Debian: apt-get install libpango-1.0-0 libcairo2 libgdk-pixbuf2.0-0
 
-# --- LLM: bốn pass trích xuất và hai đoạn nhận định ---
-# langgraph: luồng post-check là một đồ thị tuyến tính 8 node. Không có nhánh,
-# nên giá trị không nằm ở định tuyến mà ở chỗ thứ tự các bước được KHAI BÁO ở
-# một nơi thay vì ngầm định bởi thứ tự câu lệnh trong một hàm.
+# --- LLM: four extraction passes and two commentary paragraphs ---
+# langgraph: the post-check flow is a linear 8-node graph. There is no routing to
+# speak of, so the value is not in the branching but in the step order being
+# DECLARED in one place instead of implied by statement order inside a function.
 langgraph==1.2.6
 langchain==1.3.11
 langchain-core==1.4.8
 langchain-openai==1.3.2
 openai==2.43.0
 
-# --- Đọc tài liệu & OCR ---
+# --- Document reading & OCR ---
 pypdfium2==5.12.1
 pytesseract==0.3.13
 opencv-python==4.13.0.92
 numpy==2.4.6
 pillow==12.2.0
 pandas==2.3.3
-openpyxl==3.1.5          # đọc .xlsx
-xlrd==2.0.2              # đọc .xls cũ
-python-docx==1.2.0       # đọc .docx — BRD 2.3.a cho phép định dạng Word
-markdown==3.10.3         # Markdown -> HTML để xuất PDF
+openpyxl==3.1.5          # reads .xlsx
+xlrd==2.0.2              # reads legacy .xls
+python-docx==1.2.0       # reads .docx - BRD 2.3.a allows the Word format
+markdown==3.10.3         # Markdown -> HTML for the PDF export
 weasyprint==69.0         # HTML -> PDF
 
-# --- Cấu hình ---
+# --- Configuration ---
 pyyaml==6.0.3            # config/programs.yaml, document_matrix.yaml
 
 # --- Runtime / notebook ---
 python-dotenv==1.2.2
 ipython==9.14.1
-# Xoá output notebook khi commit, để dữ liệu khách hàng thật không vào repo.
-# Cần chạy `nbstripout --install` một lần mỗi lần clone.
+# Strips notebook output on commit, so real customer data never reaches the repo.
+# Run `nbstripout --install` once per clone.
 nbstripout==0.9.1

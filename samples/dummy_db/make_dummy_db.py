@@ -30,6 +30,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from src.utils.pii import IDENTIFIER, NAME, pii_hash  # noqa: E402
 DEFAULT_PATH = Path(__file__).resolve().parent / "postcheck_dummy.sqlite"
 
 BILLION = 1_000_000_000
@@ -86,6 +89,18 @@ SCHEMA: dict[str, tuple[str, ...]] = {
         "ngay_dao_han", "nhom_no",
     ),
     "v_virac_tai_chinh": ("mst", "nam", "doanh_thu", "lnst"),
+}
+
+# PRODUCTION HASHES ITS PII COLUMNS, so this database must too - otherwise the
+# checks grade a shape of data that does not exist. The rows below are written in
+# plaintext for readability and hashed on the way in.
+PII_COLUMNS: dict[str, dict[str, str]] = {
+    "v_los_phe_duyet": {"ten_cdn": NAME, "cccd_cdn": IDENTIFIER,
+                        "ten_ke_toan_truong": NAME},
+    "v_los_co_dong": {"ten": NAME, "so_cccd": IDENTIFIER},
+    "v_cic_nhom_no_ca_nhan": {"so_cccd": IDENTIFIER},
+    "v_danh_sach_black_warning_list": {"so_cccd": IDENTIFIER, "ten": NAME},
+    "v_danh_sach_amc": {"so_cccd": IDENTIFIER, "ten": NAME},
 }
 
 ROWS: dict[str, list[tuple]] = {
@@ -259,6 +274,19 @@ ROWS: dict[str, list[tuple]] = {
 }
 
 
+def hash_pii(table: str, columns: tuple[str, ...], row: tuple) -> tuple:
+    """Replace each PII cell with the hash production stores in its place."""
+
+    kinds = PII_COLUMNS.get(table, {})
+    if not kinds:
+        return row
+    names = [column.split()[0] for column in columns]
+    return tuple(
+        pii_hash(value, kinds[name]) if name in kinds and value is not None else value
+        for name, value in zip(names, row)
+    )
+
+
 def build(path: Path | str = DEFAULT_PATH) -> Path:
     """Create the database from scratch. Any existing file is replaced."""
 
@@ -272,7 +300,7 @@ def build(path: Path | str = DEFAULT_PATH) -> Path:
             connection.execute(
                 f"CREATE TABLE {table} ({', '.join(columns)})"
             )
-            rows = ROWS[table]
+            rows = [hash_pii(table, columns, row) for row in ROWS[table]]
             placeholders = ", ".join("?" for _ in columns)
             connection.executemany(
                 f"INSERT INTO {table} VALUES ({placeholders})", rows

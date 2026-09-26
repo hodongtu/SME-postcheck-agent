@@ -112,6 +112,76 @@ focus_GSO:
 # TODO - business to supply the full list of GSO codes.
 restricted_GSO: []
 
+# Cue words that mark personal data, for masking before anything is sent to a
+# model. Every pattern needs a cue: masking every 9-12 digit run swallows the tax
+# code and every figure on the balance sheet instead.
+# Matching ignores diacritics, so one entry catches the OCR variants too - "Ong"
+# also matches "Ông", "Giam doc" also matches "Giảm đắc".
+pii_person_cues:
+  - "Ông"
+  - "Bà"
+  - "Giám đốc"
+  - "Tổng Giám đốc"
+  - "Kế toán trưởng"
+  - "Người lập"
+  - "Người lập biểu"
+  - "Chủ tịch"
+  - "Đại diện"
+  - "Người đại diện"
+  - "Kiểm toán viên"
+
+# Vietnamese names open with a small closed set of surnames. Measured on a real
+# statement: cue words alone caught 6 of 16 name occurrences - the rest sit in
+# signature blocks with no cue in front of them.
+pii_surnames:
+  - "Nguyễn"
+  - "Trần"
+  - "Lê"
+  - "Phạm"
+  - "Hoàng"
+  - "Huỳnh"
+  - "Phan"
+  - "Vũ"
+  - "Võ"
+  - "Đặng"
+  - "Bùi"
+  - "Đỗ"
+  - "Hồ"
+  - "Ngô"
+  - "Dương"
+  - "Lý"
+  - "Đào"
+  - "Đoàn"
+  - "Vương"
+  - "Trịnh"
+  - "Đinh"
+  - "Lâm"
+  - "Mai"
+  - "Tạ"
+  - "Chu"
+  - "Kiều"
+  - "Cao"
+  - "Thái"
+  - "Lưu"
+  - "Hà"
+
+pii_identifier_cues:
+  - "CCCD"
+  - "CMND"
+  - "Căn cước công dân"
+  - "Căn cước"
+  - "Chứng minh nhân dân"
+  - "Số CCCD"
+  - "Số CMND"
+
+pii_contact_cues:
+  - "Điện thoại"
+  - "ĐT"
+  - "SĐT"
+  - "Tel"
+  - "Mobile"
+  - "Email"
+
 programs:
 
   - id: B1CP

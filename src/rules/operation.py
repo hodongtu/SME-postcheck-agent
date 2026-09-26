@@ -1,14 +1,4 @@
-"""BRD 2.3.c - Did the business unit follow the credit process.
-
-O05 and O06 are not in the BRD. They compare the credit application against
-the systems, which the proposal extraction pass makes available at no extra
-cost, and both differences are operational signals worth seeing. Their titles
-say so.
-
-The functions here DECIDE; they do not declare. Which of them is a rule, under
-what id, title and severity, and on which facts, is in src/rules/registry.py -
-one catalogue for all of them, so there is one place to look.
-"""
+"""BRD 2.3.c - Did the business unit follow the credit process. """
 
 from src.facts import Facts
 from src.rules._compare import norm_text
@@ -52,19 +42,19 @@ def check_limit_not_exceeded(facts: Facts, settings: dict) -> Verdict:
     exceeded: list[str] = []
     if active_total > approved_total:
         exceeded.append(
-            f"tổng: active {active_total:,.0f} đ > phê duyệt {approved_total:,.0f} đ"
+            f"tổng: đã hạch toán {active_total:,.0f} đ > phê duyệt {approved_total:,.0f} đ"
         )
     for product, amount in active_by_product.items():
         approved = float(approved_by_product.get(product, 0))
         if float(amount) > approved:
             exceeded.append(
-                f"{product}: active {float(amount):,.0f} đ > phê duyệt {approved:,.0f} đ"
+                f"{product}: đã hạch toán {float(amount):,.0f} đ > phê duyệt {approved:,.0f} đ"
             )
 
     if exceeded:
         return failed("HMTD vượt giá trị hội sở trả ra — " + "; ".join(exceeded))
     return passed(
-        f"Tổng HMTD active {active_total:,.0f} đ trong hạn mức phê duyệt "
+        f"Tổng HMTD đã hạch toán {active_total:,.0f} đ trong hạn mức phê duyệt "
         f"{approved_total:,.0f} đ; {len(active_by_product)}/{len(active_by_product)} "
         f"sản phẩm đều trong hạn mức"
     )

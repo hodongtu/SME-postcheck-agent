@@ -48,6 +48,7 @@ class Config:
     sitevisit_photo_llm: Any = None
     commentary_llm: Any = None
     enable_commentary: bool = True
+    mask_pii: bool = True
     query_executor: Any = None
     document_classifier_min_confidence: float = 0.60
 

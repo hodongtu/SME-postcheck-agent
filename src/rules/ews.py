@@ -1,15 +1,7 @@
-"""BRD 2.4 - Early identification of credit risk signals.
-
-Unlike group 2.3.b, this group reads internal and third-party information
-updated to the review date, not the state at approval time.
-
-The functions here DECIDE; they do not declare. Which of them is a rule, under
-what id, title and severity, and on which facts, is in src/rules/registry.py -
-one catalogue for all of them, so there is one place to look.
-"""
+"""BRD 2.4 - Early identification of credit risk signals. """
 
 from src.facts import Facts
-from src.rules.criteria import SHAREHOLDER_PREFIX, _subjects_on_list
+from src.rules.criteria import _shareholder_problems, _subjects_on_list
 from src.rules.engine import Verdict, failed, passed, variance_pct
 
 
@@ -61,27 +53,17 @@ def check_amc_now(facts: Facts, settings: dict) -> Verdict:
 
 
 def check_shareholders_now(facts: Facts, settings: dict) -> Verdict:
-    """The shareholders at review time, across all three lookups.
-
-    The twin of C06, which asks the same question of the approval date. Kept
-    apart from E01 and E02 so that a company whose shareholders LOS never
-    recorded still gets its own debt group and BL/WL graded.
-    """
+    """The shareholders at review time, across all three lookups. """
 
     reviewed_on = facts.get("case.postcheck_date")
     threshold = int(settings["debt_group_warning_threshold"])
     groups = facts.get("cic.shareholder_debt_groups_at_postcheck") or {}
 
-    problems = [f"{name} nhóm nợ {group}" for name, group in groups.items()
-                if group is not None and int(group) >= threshold]
-    for prefix, what in (("blwl", "BL/WL"), ("amc", "luồng thu hồi nợ AMC")):
-        for item in _subjects_on_list(facts, prefix, "postcheck"):
-            if item.startswith(SHAREHOLDER_PREFIX):
-                problems.append(f"{item} nằm trong {what}")
+    problems = _shareholder_problems(facts, groups, threshold, "postcheck")
 
     if problems:
         return failed(
-            f"Tra cứu ngày {reviewed_on}: {len(problems)} dấu hiệu trên nhóm cổ đông — "
+            f"Tra cứu ngày {reviewed_on}, nhóm {len(groups)} cổ đông có dấu hiệu: "
             + "; ".join(problems)
         )
     return passed(
@@ -106,12 +88,7 @@ def _variance_verdict(
 
 
 def check_sto_vs_application(facts: Facts, settings: dict) -> Verdict:
-    """STO revenue against the statements the RM keyed in.
-
-    Compared against the RM's own entry rather than the credit application: both
-    sides then come from a query, so the criterion is decidable on every run
-    instead of waiting on an extraction pass over the application document.
-    """
+    """STO revenue against the statements the RM keyed in. """
 
     return _variance_verdict(
         "DT STO trên LOS", float(facts.get("los.sto_revenue")),
@@ -122,12 +99,7 @@ def check_sto_vs_application(facts: Facts, settings: dict) -> Verdict:
 
 
 def check_financials_vs_virac(facts: Facts, settings: dict) -> Verdict:
-    """Statements against Virac, strictly for the same reporting period.
-
-    EQUAL, not within a band: Virac derives its figures from the statements the
-    company filed, so for one period the two are the same document read twice.
-    Any difference is a discrepancy to look at, not a tolerance to spend.
-    """
+    """Statements against Virac, strictly for the same reporting period. """
 
     year = str(int(facts.get("doc.financials.report_year")))
     virac_revenue = facts.get("virac.revenue_by_year")

@@ -242,9 +242,9 @@ def extract_sitevisit_photo_data(
     """
 
     if chain is None:
-        return None, "chưa cấu hình LLM cho pass 'SITEVISIT_PHOTO'"
+        return None, "chưa cấu hình mô hình đọc ảnh khảo sát thực địa"
     if not vocabulary:
-        return None, "persona_evidence trong config/programs.yaml chưa khai dấu hiệu nào"
+        return None, "cấu hình hệ thống chưa khai dấu hiệu kỳ vọng của chân dung nào"
 
     images = _images_from_file(path, max_images)
     if not images:
